@@ -16,7 +16,18 @@ export async function transcribeOpenAiCompatibleAudio(
 ): Promise<AudioTranscriptionResult> {
   const fetchFn = params.fetchFn ?? fetch;
   const baseUrl = normalizeBaseUrl(params.baseUrl, DEFAULT_OPENAI_AUDIO_BASE_URL);
-  const url = `${baseUrl}/audio/transcriptions`;
+  
+  // Handle baseUrl with query params (e.g., Azure OpenAI with ?api-version=...)
+  // Insert /audio/transcriptions before the query string, not after
+  let url: string;
+  const queryIndex = baseUrl.indexOf("?");
+  if (queryIndex !== -1) {
+    const basePath = baseUrl.slice(0, queryIndex);
+    const queryString = baseUrl.slice(queryIndex);
+    url = `${basePath}/audio/transcriptions${queryString}`;
+  } else {
+    url = `${baseUrl}/audio/transcriptions`;
+  }
 
   const model = resolveModel(params.model);
   const form = new FormData();
