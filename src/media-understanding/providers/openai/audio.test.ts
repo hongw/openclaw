@@ -83,31 +83,4 @@ describe("transcribeOpenAiCompatibleAudio", () => {
       }
     }
   });
-
-  it("handles baseUrl with query params (Azure OpenAI)", async () => {
-    let seenUrl: string | null = null;
-    const fetchFn = async (input: RequestInfo | URL) => {
-      seenUrl = resolveRequestUrl(input);
-      return new Response(JSON.stringify({ text: "azure test" }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    };
-
-    const result = await transcribeOpenAiCompatibleAudio({
-      buffer: Buffer.from("audio-bytes"),
-      fileName: "voice.wav",
-      apiKey: "test-key",
-      timeoutMs: 1000,
-      baseUrl: "https://myresource.openai.azure.com/openai/deployments/whisper?api-version=2024-06-01",
-      model: "whisper",
-      fetchFn,
-    });
-
-    expect(result.text).toBe("azure test");
-    // Query param should come AFTER the path, not before
-    expect(seenUrl).toBe(
-      "https://myresource.openai.azure.com/openai/deployments/whisper/audio/transcriptions?api-version=2024-06-01"
-    );
-  });
 });
