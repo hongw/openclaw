@@ -59,10 +59,12 @@ RUN apt-get update && \
     echo "HostKey /home/node/.ssh/ssh_host_ed25519_key" >> /etc/ssh/sshd_config && \
     # Allow node user to write to /run/sshd (for pid file)
     chown node:node /run/sshd && \
-    # Allow node user to use crontab
+    # Allow node user to use crontab and run cron daemon
     mkdir -p /var/spool/cron/crontabs && \
     chown node:crontab /var/spool/cron/crontabs && \
-    chmod 1730 /var/spool/cron/crontabs
+    chmod 1730 /var/spool/cron/crontabs && \
+    touch /var/run/crond.pid && \
+    chown node:node /var/run/crond.pid
 
 ARG OPENCLAW_DOCKER_APT_PACKAGES=""
 RUN if [ -n "$OPENCLAW_DOCKER_APT_PACKAGES" ]; then \
