@@ -61,7 +61,7 @@ BUILD_OUTPUT=$(az acr build \
     --registry "$ACR_NAME" \
     --image "${IMAGE_NAME}:${IMAGE_TAG}" \
     --file Dockerfile \
-    --no-logs \
+    --no-wait \
     . 2>&1) || {
     echo "ERROR: Failed to start build" >&2
     echo "$BUILD_OUTPUT" >&2
