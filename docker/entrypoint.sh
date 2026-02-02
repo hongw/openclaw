@@ -51,12 +51,11 @@ rm -f /home/node/.openclaw/browser/*/user-data/SingletonLock \
       /home/node/.openclaw/browser/*/user-data/SingletonSocket \
       /home/node/.openclaw/browser/*/user-data/SingletonCookie 2>/dev/null || true
 
-# Load user cron jobs if config file exists
+# Start supercronic (container-friendly cron) if crontab file exists
 CRON_FILE="/home/node/.openclaw/workspace/crontab-jobs.txt"
 if [[ -f "$CRON_FILE" ]]; then
-    echo "Loading cron jobs from $CRON_FILE"
-    crontab "$CRON_FILE"
-    cron  # Start cron daemon in background
+    echo "Starting supercronic with $CRON_FILE"
+    supercronic "$CRON_FILE" &
 else
     echo "No cron jobs configured ($CRON_FILE not found)"
 fi

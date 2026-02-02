@@ -42,11 +42,10 @@ RUN curl -sL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor |
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
-# Install SSH server, cron, and Python tools for remote access and skills
+# Install SSH server and Python tools for remote access and skills
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       openssh-server \
-      cron \
       python3-pip && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* && \
@@ -58,13 +57,15 @@ RUN apt-get update && \
     # Allow custom host key location from volume
     echo "HostKey /home/node/.ssh/ssh_host_ed25519_key" >> /etc/ssh/sshd_config && \
     # Allow node user to write to /run/sshd (for pid file)
-    chown node:node /run/sshd && \
-    # Allow node user to use crontab and run cron daemon
-    mkdir -p /var/spool/cron/crontabs && \
-    chown node:crontab /var/spool/cron/crontabs && \
-    chmod 1730 /var/spool/cron/crontabs && \
-    touch /var/run/crond.pid && \
-    chown node:node /var/run/crond.pid
+    chown node:node /run/sshd
+
+# Install supercronic (cron for containers, runs as non-root)
+ARG SUPERCRONIC_URL=https://github.com/aptible/supercronic/releases/download/v0.2.33/supercronic-linux-amd64
+ARG SUPERCRONIC_SHA1SUM=71b0d58cc53f6bd72cf2f293e09e294b79c666d8
+RUN curl -fsSLO "$SUPERCRONIC_URL" \
+    && echo "${SUPERCRONIC_SHA1SUM}  supercronic-linux-amd64" | sha1sum -c - \
+    && chmod +x supercronic-linux-amd64 \
+    && mv supercronic-linux-amd64 /usr/local/bin/supercronic
 
 ARG OPENCLAW_DOCKER_APT_PACKAGES=""
 RUN if [ -n "$OPENCLAW_DOCKER_APT_PACKAGES" ]; then \
