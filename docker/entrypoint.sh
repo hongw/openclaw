@@ -46,5 +46,10 @@ else
     echo "No SSH keys found, skipping sshd"
 fi
 
+# Clean up stale Chrome singleton files (prevents "profile in use" errors after container restart)
+rm -f /home/node/.openclaw/browser/*/user-data/SingletonLock \
+      /home/node/.openclaw/browser/*/user-data/SingletonSocket \
+      /home/node/.openclaw/browser/*/user-data/SingletonCookie 2>/dev/null || true
+
 # Start OpenClaw gateway
 exec node dist/index.js gateway "$@"
