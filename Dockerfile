@@ -89,6 +89,9 @@ RUN OPENCLAW_A2UI_SKIP_MISSING=1 pnpm build
 ENV OPENCLAW_PREFER_PNPM=1
 RUN pnpm ui:build
 
+# Install mcporter globally (MCP CLI tool)
+RUN npm install -g mcporter
+
 ENV NODE_ENV=production
 
 # Copy entrypoint script (SSH starts only if /home/node/.ssh/authorized_keys exists)
