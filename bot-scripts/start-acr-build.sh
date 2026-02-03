@@ -1,7 +1,10 @@
 #!/bin/bash
 #
-# Start an ACR build and return the build ID.
+# Start an ACR build from GitHub and return the build ID.
 # Does NOT wait for completion - designed for async monitoring.
+#
+# Builds from GitHub URL instead of local directory to avoid
+# memory issues when uploading large repos.
 #
 # Usage:
 #   ./start-acr-build.sh <acr-name> [--tag-latest]
@@ -14,8 +17,8 @@
 #   Prints build info as JSON to stdout (for parsing)
 #
 # Examples:
-#   ./start-acr-build.sh soyboxjapaneast
-#   ./start-acr-build.sh soyboxjapaneast --tag-latest
+#   ./start-acr-build.sh myregistry
+#   ./start-acr-build.sh myregistry --tag-latest
 #
 
 set -e
@@ -41,9 +44,28 @@ REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
 cd "$REPO_ROOT"
 
-# Get branch name and commit ID
+# Get GitHub repo URL from git remote
+GITHUB_REPO=$(git remote get-url origin 2>/dev/null)
+if [ -z "$GITHUB_REPO" ]; then
+    echo "ERROR: Could not get origin remote URL" >&2
+    exit 1
+fi
+
+# Convert SSH URL to HTTPS if needed (git@github.com:user/repo.git -> https://github.com/user/repo.git)
+if [[ "$GITHUB_REPO" =~ ^git@github\.com:(.+)$ ]]; then
+    GITHUB_REPO="https://github.com/${BASH_REMATCH[1]}"
+fi
+
+# Get branch name and commit ID from local repo
 BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
 COMMIT_ID=$(git rev-parse --short=7 HEAD)
+
+# Check if local branch is pushed to remote
+REMOTE_COMMIT=$(git ls-remote origin "$BRANCH_NAME" 2>/dev/null | cut -f1 | head -c7)
+if [ "$REMOTE_COMMIT" != "$COMMIT_ID" ]; then
+    echo "WARNING: Local commit $COMMIT_ID differs from remote $REMOTE_COMMIT" >&2
+    echo "Make sure to push your changes before building!" >&2
+fi
 
 # Extract version from branch name
 if [[ "$BRANCH_NAME" =~ ^release/(.+)$ ]]; then
@@ -55,14 +77,15 @@ fi
 IMAGE_TAG="${VERSION_PART}-${COMMIT_ID}"
 FULL_IMAGE="${ACR_NAME}.azurecr.io/${IMAGE_NAME}:${IMAGE_TAG}"
 
+# Build from GitHub URL (avoids uploading large local directory)
+GITHUB_SOURCE="${GITHUB_REPO}#${BRANCH_NAME}"
+
 # Start ACR build (no-wait returns immediately)
-# We use --no-logs to avoid blocking on log streaming
 BUILD_OUTPUT=$(az acr build \
     --registry "$ACR_NAME" \
     --image "${IMAGE_NAME}:${IMAGE_TAG}" \
-    --file Dockerfile \
     --no-wait \
-    . 2>&1) || {
+    "$GITHUB_SOURCE" 2>&1) || {
     echo "ERROR: Failed to start build" >&2
     echo "$BUILD_OUTPUT" >&2
     exit 1
@@ -90,6 +113,7 @@ cat << EOF
   "acrName": "$ACR_NAME",
   "branch": "$BRANCH_NAME",
   "commit": "$COMMIT_ID",
+  "githubSource": "$GITHUB_SOURCE",
   "tagLatest": ${TAG_LATEST:-false}
 }
 EOF
