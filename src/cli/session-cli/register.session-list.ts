@@ -6,7 +6,7 @@ import { formatDocsLink } from "../../terminal/links.js";
 import { theme } from "../../terminal/theme.js";
 import { formatHelpExamples } from "../help-format.js";
 
-export function registerSessionsListCommand(parent: Command) {
+export function registerSessionListCommand(parent: Command) {
   parent
     .command("list", { isDefault: true })
     .aliases(["ls"])
@@ -19,11 +19,11 @@ export function registerSessionsListCommand(parent: Command) {
       "after",
       () =>
         `\n${theme.heading("Examples:")}\n${formatHelpExamples([
-          ["openclaw sessions", "List all sessions."],
-          ["openclaw sessions list", "List all sessions (explicit)."],
-          ["openclaw sessions --active 120", "Only last 2 hours."],
-          ["openclaw sessions --json", "Machine-readable output."],
-          ["openclaw sessions --store ./tmp/sessions.json", "Use a specific session store."],
+          ["openclaw session", "List all sessions."],
+          ["openclaw session list", "List all sessions (explicit)."],
+          ["openclaw session --active 120", "Only last 2 hours."],
+          ["openclaw session --json", "Machine-readable output."],
+          ["openclaw session --store ./tmp/sessions.json", "Use a specific session store."],
         ])}\n\n${theme.muted(
           "Shows token usage per session when the agent reports it; set agents.defaults.contextTokens to see % of your model window.",
         )}`,

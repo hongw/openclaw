@@ -5,29 +5,26 @@ import { theme } from "../../terminal/theme.js";
 import { formatHelpExamples } from "../help-format.js";
 import { addGatewayConnectionOptions, resolveGatewayConnection } from "./shared.js";
 
-export function registerSessionsRemoveCommand(parent: Command) {
+export function registerSessionRemoveCommand(parent: Command) {
   const cmd = parent
     .command("remove <key>")
     .aliases(["rm", "delete"])
-    .description("Remove a session (archives transcript)")
-    .option("--keep-transcript", "Do not archive/delete the transcript file", false)
+    .description("Remove a session (matches Portal delete)")
     .option("--json", "Output JSON", false)
     .option("--verbose", "Verbose logging", false)
     .addHelpText(
       "after",
       () =>
         `\n${theme.heading("Examples:")}\n${formatHelpExamples([
-          ["openclaw sessions remove cron:job123", "Remove a cron session."],
-          ["openclaw sessions rm telegram:user:5568782822", "Remove by key (short alias)."],
-          ["openclaw sessions remove --keep-transcript cron:job123", "Remove but keep transcript."],
+          ["openclaw session remove cron:job123", "Remove a cron session."],
+          ["openclaw session rm telegram:user:5568782822", "Remove by key (short alias)."],
         ])}`,
     )
     .action(async (key: string, opts) => {
       setVerbose(Boolean(opts.verbose));
-      await sessionsRemoveCommand(
+      await sessionRemoveCommand(
         {
           key,
-          keepTranscript: Boolean(opts.keepTranscript),
           json: Boolean(opts.json),
           url: opts.url as string | undefined,
           token: opts.token as string | undefined,
@@ -40,10 +37,9 @@ export function registerSessionsRemoveCommand(parent: Command) {
   addGatewayConnectionOptions(cmd);
 }
 
-async function sessionsRemoveCommand(
+async function sessionRemoveCommand(
   opts: {
     key: string;
-    keepTranscript?: boolean;
     json?: boolean;
     url?: string;
     token?: string;
@@ -72,7 +68,8 @@ async function sessionsRemoveCommand(
       method: "sessions.delete",
       params: {
         key,
-        deleteTranscript: !opts.keepTranscript,
+        // Portal delete uses deleteTranscript=true, which archives transcript files.
+        deleteTranscript: true,
       },
       url: conn.url,
       token: conn.token,

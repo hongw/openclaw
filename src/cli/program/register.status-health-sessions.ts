@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import { healthCommand } from "../../commands/health.js";
+import { sessionsCommand } from "../../commands/sessions.js";
 import { statusCommand } from "../../commands/status.js";
 import { setVerbose } from "../../globals.js";
 import { defaultRuntime } from "../../runtime.js";
@@ -8,7 +9,7 @@ import { theme } from "../../terminal/theme.js";
 import { runCommandWithRuntime } from "../cli-utils.js";
 import { formatHelpExamples } from "../help-format.js";
 import { parsePositiveIntOrUndefined } from "./helpers.js";
-import { registerSessionsCli } from "../sessions-cli/register.js";
+import { registerSessionCli } from "../session-cli/register.js";
 
 function resolveVerbose(opts: { verbose?: boolean; debug?: boolean }): boolean {
   return Boolean(opts.verbose || opts.debug);
@@ -108,6 +109,42 @@ export function registerStatusHealthSessionsCommands(program: Command) {
       });
     });
 
-  // Sessions command with subcommands (list, remove)
-  registerSessionsCli(program);
+  program
+    .command("sessions")
+    .description("List stored conversation sessions")
+    .option("--json", "Output as JSON", false)
+    .option("--verbose", "Verbose logging", false)
+    .option("--store <path>", "Path to session store (default: resolved from config)")
+    .option("--active <minutes>", "Only show sessions updated within the past N minutes")
+    .addHelpText(
+      "after",
+      () =>
+        `\n${theme.heading("Examples:")}\n${formatHelpExamples([
+          ["openclaw sessions", "List all sessions."],
+          ["openclaw sessions --active 120", "Only last 2 hours."],
+          ["openclaw sessions --json", "Machine-readable output."],
+          ["openclaw sessions --store ./tmp/sessions.json", "Use a specific session store."],
+        ])}\n\n${theme.muted(
+          "Shows token usage per session when the agent reports it; set agents.defaults.contextTokens to see % of your model window.",
+        )}`,
+    )
+    .addHelpText(
+      "after",
+      () =>
+        `\n${theme.muted("Docs:")} ${formatDocsLink("/cli/sessions", "docs.openclaw.ai/cli/sessions")}\n`,
+    )
+    .action(async (opts) => {
+      setVerbose(Boolean(opts.verbose));
+      await sessionsCommand(
+        {
+          json: Boolean(opts.json),
+          store: opts.store as string | undefined,
+          active: opts.active as string | undefined,
+        },
+        defaultRuntime,
+      );
+    });
+
+  registerSessionCli(program);
 }
+
