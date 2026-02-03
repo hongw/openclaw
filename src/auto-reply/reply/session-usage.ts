@@ -32,12 +32,29 @@ export async function persistSessionUsageUpdate(params: {
         update: async (entry) => {
           const input = params.usage?.input ?? 0;
           const output = params.usage?.output ?? 0;
-          const promptTokens =
-            input + (params.usage?.cacheRead ?? 0) + (params.usage?.cacheWrite ?? 0);
+          const cacheRead = params.usage?.cacheRead ?? 0;
+          const cacheWrite = params.usage?.cacheWrite ?? 0;
+          const promptTokens = input + cacheRead + cacheWrite;
+          const totalForTurn = promptTokens > 0 ? promptTokens : (params.usage?.total ?? input);
           const patch: Partial<SessionEntry> = {
+            // Current turn (overwritten)
             inputTokens: input,
             outputTokens: output,
-            totalTokens: promptTokens > 0 ? promptTokens : (params.usage?.total ?? input),
+            totalTokens: totalForTurn,
+            cacheReadTokens: cacheRead,
+            cacheWriteTokens: cacheWrite,
+            // Session cumulative (accumulated since last reset)
+            sessionInputTokens: (entry.sessionInputTokens ?? 0) + input,
+            sessionOutputTokens: (entry.sessionOutputTokens ?? 0) + output,
+            sessionTotalTokens: (entry.sessionTotalTokens ?? 0) + totalForTurn,
+            sessionCacheReadTokens: (entry.sessionCacheReadTokens ?? 0) + cacheRead,
+            sessionCacheWriteTokens: (entry.sessionCacheWriteTokens ?? 0) + cacheWrite,
+            // Lifetime cumulative (never reset)
+            lifetimeInputTokens: (entry.lifetimeInputTokens ?? 0) + input,
+            lifetimeOutputTokens: (entry.lifetimeOutputTokens ?? 0) + output,
+            lifetimeTotalTokens: (entry.lifetimeTotalTokens ?? 0) + totalForTurn,
+            lifetimeCacheReadTokens: (entry.lifetimeCacheReadTokens ?? 0) + cacheRead,
+            lifetimeCacheWriteTokens: (entry.lifetimeCacheWriteTokens ?? 0) + cacheWrite,
             modelProvider: params.providerUsed ?? entry.modelProvider,
             model: params.modelUsed ?? entry.model,
             contextTokens: params.contextTokensUsed ?? entry.contextTokens,
