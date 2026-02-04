@@ -9,6 +9,7 @@ import { theme } from "../../terminal/theme.js";
 import { runCommandWithRuntime } from "../cli-utils.js";
 import { formatHelpExamples } from "../help-format.js";
 import { parsePositiveIntOrUndefined } from "./helpers.js";
+import { registerSessionCli } from "../session-cli/register.js";
 
 function resolveVerbose(opts: { verbose?: boolean; debug?: boolean }): boolean {
   return Boolean(opts.verbose || opts.debug);
@@ -143,4 +144,7 @@ export function registerStatusHealthSessionsCommands(program: Command) {
         defaultRuntime,
       );
     });
+
+  registerSessionCli(program);
 }
+
