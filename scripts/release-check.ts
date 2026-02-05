@@ -1,7 +1,7 @@
 #!/usr/bin/env -S node --import tsx
 
 import { execSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 type PackFile = { path: string };
@@ -77,6 +77,9 @@ function checkPluginVersions() {
 
 function getBundledHookRequiredPaths(): string[] {
   const bundledRoot = resolve("src", "hooks", "bundled");
+  if (!existsSync(bundledRoot)) {
+    return [];
+  }
   const entries = readdirSync(bundledRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
