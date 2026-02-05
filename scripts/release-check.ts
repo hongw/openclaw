@@ -75,14 +75,28 @@ function checkPluginVersions() {
   }
 }
 
+function getBundledHookRequiredPaths(): string[] {
+  const bundledRoot = resolve("src", "hooks", "bundled");
+  const entries = readdirSync(bundledRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .toSorted();
+
+  return entries.flatMap((hookName) => [
+    `dist/hooks/bundled/${hookName}/HOOK.md`,
+    `dist/hooks/bundled/${hookName}/handler.js`,
+  ]);
+}
+
 function main() {
   checkPluginVersions();
 
   const results = runPackDry();
   const files = results.flatMap((entry) => entry.files ?? []);
   const paths = new Set(files.map((file) => file.path));
+  const requiredHookPaths = getBundledHookRequiredPaths();
 
-  const missing = requiredPaths.filter((path) => !paths.has(path));
+  const missing = [...requiredPaths, ...requiredHookPaths].filter((path) => !paths.has(path));
   const forbidden = [...paths].filter((path) =>
     forbiddenPrefixes.some((prefix) => path.startsWith(prefix)),
   );
