@@ -92,6 +92,9 @@ RUN pnpm ui:build
 # Install mcporter globally (MCP CLI tool)
 RUN npm install -g mcporter
 
+# Install copilot-api globally (GitHub Copilot to OpenAI/Anthropic API proxy)
+RUN npm install -g copilot-api@latest
+
 ENV NODE_ENV=production
 
 # Copy entrypoint script (SSH starts only if /home/node/.ssh/authorized_keys exists)
