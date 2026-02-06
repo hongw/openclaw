@@ -60,5 +60,14 @@ else
     echo "No cron jobs configured ($CRON_FILE not found)"
 fi
 
+# Run config.sh if it exists
+CONFIG_SCRIPT="/home/node/openclaw-config/config.sh"
+if [[ -f "$CONFIG_SCRIPT" ]]; then
+    echo "Running config.sh..."
+    bash "$CONFIG_SCRIPT"
+else
+    echo "No config.sh found at $CONFIG_SCRIPT"
+fi
+
 # Start OpenClaw gateway
 exec node dist/index.js gateway "$@"
