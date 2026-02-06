@@ -122,9 +122,8 @@ export function resolveSession(opts: {
     fresh && sessionEntry?.thinkingLevel
       ? normalizeThinkLevel(sessionEntry.thinkingLevel)
       : undefined;
-  // Verbose setting persists across /new and /reset for debugging convenience
   const persistedVerbose =
-    sessionEntry?.verboseLevel
+    fresh && sessionEntry?.verboseLevel
       ? normalizeVerboseLevel(sessionEntry.verboseLevel)
       : undefined;
 
