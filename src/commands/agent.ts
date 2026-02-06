@@ -228,7 +228,8 @@ export async function agentCommand(
           next.thinkingLevel = thinkOverride;
         }
       }
-      applyVerboseOverride(next, verboseOverride);
+      // Persist the resolved verbose level (including inherited value from previous session)
+      applyVerboseOverride(next, verboseOverride ?? resolvedVerboseLevel);
       sessionStore[sessionKey] = next;
       await updateSessionStore(storePath, (store) => {
         store[sessionKey] = next;
