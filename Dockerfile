@@ -95,6 +95,9 @@ RUN npm install -g mcporter
 # Install copilot-api globally (GitHub Copilot to OpenAI/Anthropic API proxy)
 RUN npm install -g copilot-api@latest
 
+# Install clawhub globally (Skills registry CLI)
+RUN npm install -g clawhub
+
 ENV NODE_ENV=production
 
 # Allow non-root user to write temp files during runtime/tests.
