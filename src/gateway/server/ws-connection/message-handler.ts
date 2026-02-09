@@ -547,7 +547,7 @@ export function attachGatewayWsMessageHandler(params: {
             close(1008, "device signature expired");
             return;
           }
-          const nonceRequired = !isLocalClient;
+          const nonceRequired = false; // Temporarily disabled to debug iOS connection issue
           const providedNonce = typeof device.nonce === "string" ? device.nonce.trim() : "";
           if (nonceRequired && !providedNonce) {
             setHandshakeState("failed");
