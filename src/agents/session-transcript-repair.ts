@@ -248,6 +248,13 @@ export function repairToolUseResultPairing(messages: AgentMessage[]): ToolUseRep
 
     const toolCallIds = new Set(toolCalls.map((t) => t.id));
 
+    // Errored/aborted assistant messages with tool calls must be dropped along with
+    // their tool results. pi-ai's transformMessages() strips these assistant messages
+    // but keeps their tool results, which orphans the tool_result blocks and causes
+    // Anthropic API rejections ("unexpected tool_use_id found in tool_result blocks").
+    const assistantStopReason = (assistant as { stopReason?: unknown }).stopReason;
+    const isErroredAssistant = assistantStopReason === "error" || assistantStopReason === "aborted";
+
     const spanResultsById = new Map<string, Extract<AgentMessage, { role: "toolResult" }>>();
     const remainder: AgentMessage[] = [];
 
@@ -287,6 +294,20 @@ export function repairToolUseResultPairing(messages: AgentMessage[]): ToolUseRep
         droppedOrphanCount += 1;
         changed = true;
       }
+    }
+
+    // Drop errored/aborted assistants and their tool results entirely.
+    // pi-ai's transformMessages() strips these assistant messages but keeps their
+    // tool results, which orphans the tool_result blocks. By dropping them here,
+    // the orphaned blocks never reach the API.
+    if (isErroredAssistant) {
+      changed = true;
+      droppedOrphanCount += spanResultsById.size;
+      for (const rem of remainder) {
+        out.push(rem);
+      }
+      i = j - 1;
+      continue;
     }
 
     out.push(msg);
