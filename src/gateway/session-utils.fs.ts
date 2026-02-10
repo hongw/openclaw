@@ -3,10 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { SessionPreviewItem } from "./session-utils.types.js";
-import {
-  repairToolCallInputs,
-  repairToolUseResultPairing,
-} from "../agents/session-transcript-repair.js";
+import { repairToolUseResultPairing } from "../agents/session-transcript-repair.js";
 import { resolveSessionTranscriptPath } from "../config/sessions.js";
 import { stripEnvelope } from "./chat-sanitize.js";
 
@@ -41,13 +38,7 @@ export function readSessionMessages(
   // Without this, sessions reload with mismatched tool_use/tool_result pairs,
   // causing API errors like "unexpected tool_use_id in tool_result blocks".
   // See: https://github.com/openclaw/openclaw/issues/7930
-  //
-  // Also strip tool_use blocks without input and their orphaned tool_result
-  // messages. This complements the runtime sanitization in sanitizeSessionHistory()
-  // and ensures corrupted sessions are repaired on load.
-  // See: https://github.com/openclaw/openclaw/issues/12392
-  const inputRepaired = repairToolCallInputs(messages as AgentMessage[]);
-  const repaired = repairToolUseResultPairing(inputRepaired.messages);
+  const repaired = repairToolUseResultPairing(messages as AgentMessage[]);
   return repaired.messages;
 }
 
