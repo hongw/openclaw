@@ -2,6 +2,12 @@
 
 Docs: https://docs.openclaw.ai
 
+## Unreleased
+
+### Fixes
+
+- Gateway: fix post-compaction amnesia for injected messages - use SessionManager for `chat.inject` to preserve parentId chain. (cherry-pick #12283)
+
 ## 2026.2.2
 
 ### Changes
