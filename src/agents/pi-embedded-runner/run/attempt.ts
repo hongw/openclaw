@@ -47,6 +47,7 @@ import { createOpenClawCodingTools } from "../../pi-tools.js";
 import { resolveSandboxContext } from "../../sandbox.js";
 import { resolveSandboxRuntimeStatus } from "../../sandbox/runtime-status.js";
 import { repairSessionFileIfNeeded } from "../../session-file-repair.js";
+import { installRunIdInjector } from "../../session-runid-injector.js";
 import { guardSessionManager } from "../../session-tool-result-guard-wrapper.js";
 import { acquireSessionWriteLock } from "../../session-write-lock.js";
 import {
@@ -423,6 +424,10 @@ export async function runEmbeddedAttempt(
         allowSyntheticToolResults: transcriptPolicy.allowSyntheticToolResults,
       });
       trackSessionManagerAccess(params.sessionFile);
+
+      // Inject runId and runSeq into every message for client correlation
+      // Side effect only - injector modifies sessionManager.appendMessage
+      void installRunIdInjector(sessionManager, { runId: params.runId });
 
       await prepareSessionManagerForRun({
         sessionManager,
