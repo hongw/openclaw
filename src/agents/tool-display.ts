@@ -188,7 +188,13 @@ function resolveReadDetail(args: unknown): string | undefined {
     return undefined;
   }
   const record = args as Record<string, unknown>;
-  const path = typeof record.path === "string" ? record.path : undefined;
+  // Support both path and file_path (Claude Code convention)
+  const path =
+    typeof record.path === "string"
+      ? record.path
+      : typeof record.file_path === "string"
+        ? record.file_path
+        : undefined;
   if (!path) {
     return undefined;
   }
@@ -205,7 +211,13 @@ function resolveWriteDetail(args: unknown): string | undefined {
     return undefined;
   }
   const record = args as Record<string, unknown>;
-  const path = typeof record.path === "string" ? record.path : undefined;
+  // Support both path and file_path (Claude Code convention)
+  const path =
+    typeof record.path === "string"
+      ? record.path
+      : typeof record.file_path === "string"
+        ? record.file_path
+        : undefined;
   return path;
 }
 
