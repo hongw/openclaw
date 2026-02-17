@@ -196,6 +196,7 @@ async function maybeMigrateLegacyConfig(): Promise<string[]> {
 export async function loadAndMaybeMigrateDoctorConfig(params: {
   options: DoctorOptions;
   confirm: (p: { message: string; initialValue: boolean }) => Promise<boolean>;
+  configPath?: string;
 }) {
   const shouldRepair = params.options.repair === true || params.options.yes === true;
   const stateDirResult = await autoMigrateLegacyStateDir({ env: process.env });
@@ -211,7 +212,7 @@ export async function loadAndMaybeMigrateDoctorConfig(params: {
     note(legacyConfigChanges.map((entry) => `- ${entry}`).join("\n"), "Doctor changes");
   }
 
-  let snapshot = await readConfigFileSnapshot();
+  let snapshot = await readConfigFileSnapshot(params.configPath);
   const baseCfg = snapshot.config ?? {};
   let cfg: OpenClawConfig = baseCfg;
   let candidate = structuredClone(baseCfg);
