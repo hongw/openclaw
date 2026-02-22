@@ -648,8 +648,10 @@ export function listSessionsFromStore(params: {
         outputTokens: entry?.outputTokens,
         totalTokens: total,
         responseUsage: entry?.responseUsage,
-        modelProvider: entry?.modelProvider,
-        model: entry?.model,
+        // Use override values when set (e.g., via /model command)
+        // NOTE: Upstream fixed this properly in #18660 (resolveSessionModelRef)
+        modelProvider: entry?.providerOverride ?? entry?.modelProvider,
+        model: entry?.modelOverride ?? entry?.model,
         contextTokens: entry?.contextTokens,
         deliveryContext: deliveryFields.deliveryContext,
         lastChannel: deliveryFields.lastChannel ?? entry?.lastChannel,
