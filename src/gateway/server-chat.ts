@@ -286,6 +286,34 @@ export function createAgentEventHandler({
     if (isSilentReplyText(text, SILENT_REPLY_TOKEN)) {
       return;
     }
+
+    // Detect message boundary within the same clientRunId stream.
+    // This happens when one run produces multiple assistant messages (e.g., reply -> tool -> reply).
+    // Without this, the 150ms throttle can cause the last few characters of the previous message
+    // to be lost when switching to a new message.
+    const lastText = chatRunState.buffers.get(clientRunId) ?? "";
+    if (lastText && (text.length < lastText.length || !text.startsWith(lastText))) {
+      // Only flush if there's content and it's not a heartbeat that should be hidden
+      if (lastText && !shouldHideHeartbeatChatOutput(clientRunId, sourceRunId)) {
+        const now = Date.now();
+        const flushPayload = {
+          runId: clientRunId,
+          sessionKey,
+          seq,
+          state: "delta" as const,
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: lastText }],
+            timestamp: now,
+          },
+        };
+        broadcast("chat", flushPayload, { dropIfSlow: true });
+        nodeSendToSession(sessionKey, "chat", flushPayload);
+      }
+      // Reset throttle so the new message can emit immediately
+      chatRunState.deltaSentAt.delete(clientRunId);
+    }
+
     chatRunState.buffers.set(clientRunId, text);
     if (shouldHideHeartbeatChatOutput(clientRunId, sourceRunId)) {
       return;
