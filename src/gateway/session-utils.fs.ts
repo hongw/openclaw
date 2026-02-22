@@ -88,7 +88,9 @@ export function readSessionMessages(
     try {
       const parsed = JSON.parse(line);
       if (parsed?.message) {
-        messages.push(parsed.message);
+        // Include entry id in message if available
+        const msg = parsed.id ? { ...parsed.message, id: parsed.id } : parsed.message;
+        messages.push(msg);
         continue;
       }
 
