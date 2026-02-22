@@ -69,6 +69,7 @@ export type SessionEntry = {
   queueDebounceMs?: number;
   queueCap?: number;
   queueDrop?: "old" | "new" | "summarize";
+  /** Current turn token counts (overwritten each turn) */
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
@@ -80,6 +81,16 @@ export type SessionEntry = {
   totalTokensFresh?: boolean;
   cacheRead?: number;
   cacheWrite?: number;
+  /** Session cumulative token counts (reset on /new or /reset) */
+  sessionInputTokens?: number;
+  sessionOutputTokens?: number;
+  sessionCacheRead?: number;
+  sessionCacheWrite?: number;
+  /** Lifetime cumulative token counts (never reset) */
+  lifetimeInputTokens?: number;
+  lifetimeOutputTokens?: number;
+  lifetimeCacheRead?: number;
+  lifetimeCacheWrite?: number;
   modelProvider?: string;
   model?: string;
   /**

@@ -65,6 +65,8 @@ export async function persistSessionUsageUpdate(params: {
         update: async (entry) => {
           const input = params.usage?.input ?? 0;
           const output = params.usage?.output ?? 0;
+          const cacheRead = params.usage?.cacheRead ?? 0;
+          const cacheWrite = params.usage?.cacheWrite ?? 0;
           const resolvedContextTokens = params.contextTokensUsed ?? entry.contextTokens;
           const hasPromptTokens =
             typeof params.promptTokens === "number" &&
@@ -84,13 +86,24 @@ export async function persistSessionUsageUpdate(params: {
               })
             : undefined;
           const patch: Partial<SessionEntry> = {
+            // Current turn (overwritten each turn)
             inputTokens: input,
             outputTokens: output,
-            cacheRead: params.usage?.cacheRead ?? 0,
-            cacheWrite: params.usage?.cacheWrite ?? 0,
+            cacheRead,
+            cacheWrite,
             // Missing a last-call snapshot means context utilization is stale/unknown.
             totalTokens,
             totalTokensFresh: typeof totalTokens === "number",
+            // Session cumulative (accumulated since last reset)
+            sessionInputTokens: (entry.sessionInputTokens ?? 0) + input,
+            sessionOutputTokens: (entry.sessionOutputTokens ?? 0) + output,
+            sessionCacheRead: (entry.sessionCacheRead ?? 0) + cacheRead,
+            sessionCacheWrite: (entry.sessionCacheWrite ?? 0) + cacheWrite,
+            // Lifetime cumulative (never reset)
+            lifetimeInputTokens: (entry.lifetimeInputTokens ?? 0) + input,
+            lifetimeOutputTokens: (entry.lifetimeOutputTokens ?? 0) + output,
+            lifetimeCacheRead: (entry.lifetimeCacheRead ?? 0) + cacheRead,
+            lifetimeCacheWrite: (entry.lifetimeCacheWrite ?? 0) + cacheWrite,
             modelProvider: params.providerUsed ?? entry.modelProvider,
             model: params.modelUsed ?? entry.model,
             contextTokens: resolvedContextTokens,

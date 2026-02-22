@@ -290,43 +290,62 @@ const readUsageFromSessionLog = (
   }
 };
 
-const formatUsagePair = (input?: number | null, output?: number | null) => {
-  if (input == null && output == null) {
+const formatTokenUsageLine = (entry?: SessionEntry | null) => {
+  if (!entry) {
     return null;
   }
-  const inputLabel = typeof input === "number" ? formatTokenCount(input) : "?";
-  const outputLabel = typeof output === "number" ? formatTokenCount(output) : "?";
-  return `🧮 Tokens: ${inputLabel} in / ${outputLabel} out`;
-};
+  const lines: string[] = [];
 
-const formatCacheLine = (
-  input?: number | null,
-  cacheRead?: number | null,
-  cacheWrite?: number | null,
-) => {
-  if (!cacheRead && !cacheWrite) {
-    return null;
-  }
-  if (
-    (typeof cacheRead !== "number" || cacheRead <= 0) &&
-    (typeof cacheWrite !== "number" || cacheWrite <= 0)
-  ) {
-    return null;
+  // Turn tokens (include cache in total input)
+  const turnInput = entry.inputTokens ?? 0;
+  const turnOutput = entry.outputTokens ?? 0;
+  const turnCacheRead = entry.cacheRead ?? 0;
+  const turnCacheWrite = entry.cacheWrite ?? 0;
+  const turnTotalIn = turnInput + turnCacheRead + turnCacheWrite;
+
+  if (turnTotalIn > 0 || turnOutput > 0) {
+    let turnPart = `   Turn: ${formatTokenCount(turnTotalIn)}↙ ${formatTokenCount(turnOutput)}↗`;
+    if (turnCacheRead > 0 || turnCacheWrite > 0) {
+      turnPart += ` (♻️${formatTokenCount(turnCacheRead)}↙ ${formatTokenCount(turnCacheWrite)}↗)`;
+    }
+    lines.push(turnPart);
   }
 
-  const cachedLabel = typeof cacheRead === "number" ? formatTokenCount(cacheRead) : "0";
-  const newLabel = typeof cacheWrite === "number" ? formatTokenCount(cacheWrite) : "0";
+  // Session (Current) tokens - total input includes cache
+  const sessionIn = entry.sessionInputTokens ?? 0;
+  const sessionOut = entry.sessionOutputTokens ?? 0;
+  const sessionCacheRead = entry.sessionCacheRead ?? 0;
+  const sessionCacheWrite = entry.sessionCacheWrite ?? 0;
+  const sessionTotalIn = sessionIn + sessionCacheRead + sessionCacheWrite;
 
-  const totalInput =
-    (typeof cacheRead === "number" ? cacheRead : 0) +
-    (typeof cacheWrite === "number" ? cacheWrite : 0) +
-    (typeof input === "number" ? input : 0);
-  const hitRate =
-    totalInput > 0 && typeof cacheRead === "number"
-      ? Math.round((cacheRead / totalInput) * 100)
-      : 0;
+  if (sessionTotalIn > 0 || sessionOut > 0) {
+    let sessionPart = `   Current: ${formatTokenCount(sessionTotalIn)}↙ ${formatTokenCount(sessionOut)}↗`;
+    if (sessionCacheRead > 0 || sessionCacheWrite > 0) {
+      sessionPart += ` (♻️${formatTokenCount(sessionCacheRead)}↙ ${formatTokenCount(sessionCacheWrite)}↗)`;
+    }
+    lines.push(sessionPart);
+  }
 
-  return `🗄️ Cache: ${hitRate}% hit · ${cachedLabel} cached, ${newLabel} new`;
+  // Lifetime tokens - total input includes cache
+  const lifetimeIn = entry.lifetimeInputTokens ?? 0;
+  const lifetimeOut = entry.lifetimeOutputTokens ?? 0;
+  const lifetimeCacheRead = entry.lifetimeCacheRead ?? 0;
+  const lifetimeCacheWrite = entry.lifetimeCacheWrite ?? 0;
+  const lifetimeTotalIn = lifetimeIn + lifetimeCacheRead + lifetimeCacheWrite;
+
+  if (lifetimeTotalIn > 0 || lifetimeOut > 0) {
+    let lifetimePart = `   Lifetime: ${formatTokenCount(lifetimeTotalIn)}↙ ${formatTokenCount(lifetimeOut)}↗`;
+    if (lifetimeCacheRead > 0 || lifetimeCacheWrite > 0) {
+      lifetimePart += ` (♻️${formatTokenCount(lifetimeCacheRead)}↙ ${formatTokenCount(lifetimeCacheWrite)}↗)`;
+    }
+    lines.push(lifetimePart);
+  }
+
+  if (lines.length === 0) {
+    return null;
+  }
+
+  return `🧮 Token Usage\n${lines.join("\n")}`;
 };
 
 const formatMediaUnderstandingLine = (decisions?: ReadonlyArray<MediaUnderstandingDecision>) => {
@@ -617,11 +636,8 @@ export function buildStatusMessage(args: StatusArgs): string {
     : null;
   const commit = resolveCommitHash();
   const versionLine = `🦞 OpenClaw ${VERSION}${commit ? ` (${commit})` : ""}`;
-  const usagePair = formatUsagePair(inputTokens, outputTokens);
-  const cacheLine = formatCacheLine(inputTokens, cacheRead, cacheWrite);
+  const tokenUsageLine = formatTokenUsageLine(entry);
   const costLine = costLabel ? `💵 Cost: ${costLabel}` : null;
-  const usageCostLine =
-    usagePair && costLine ? `${usagePair} · ${costLine}` : (usagePair ?? costLine);
   const mediaLine = formatMediaUnderstandingLine(args.mediaDecisions);
   const voiceLine = formatVoiceModeLine(args.config, args.sessionEntry);
 
@@ -630,8 +646,8 @@ export function buildStatusMessage(args: StatusArgs): string {
     args.timeLine,
     modelLine,
     fallbackLine,
-    usageCostLine,
-    cacheLine,
+    tokenUsageLine,
+    costLine,
     `📚 ${contextLine}`,
     mediaLine,
     args.usageLine,

@@ -380,6 +380,15 @@ export async function initSessionState(params: {
     sessionEntry.inputTokens = undefined;
     sessionEntry.outputTokens = undefined;
     sessionEntry.contextTokens = undefined;
+    sessionEntry.totalTokensFresh = undefined;
+    // Reset session-level token counters, but preserve lifetime counters
+    sessionEntry.sessionInputTokens = 0;
+    sessionEntry.sessionOutputTokens = 0;
+    sessionEntry.sessionCacheRead = 0;
+    sessionEntry.sessionCacheWrite = 0;
+    // Clear current turn cache tokens on reset
+    sessionEntry.cacheRead = undefined;
+    sessionEntry.cacheWrite = undefined;
   }
   // Preserve per-session overrides while resetting compaction state on /new.
   sessionStore[sessionKey] = { ...sessionStore[sessionKey], ...sessionEntry };
