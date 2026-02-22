@@ -154,6 +154,15 @@ const entries: SubCliEntry[] = [
     },
   },
   {
+    name: "session",
+    description: "Manage conversation session store",
+    hasSubcommands: true,
+    register: async (program) => {
+      const mod = await import("../session-cli/register.js");
+      mod.registerSessionCli(program);
+    },
+  },
+  {
     name: "dns",
     description: "DNS helpers for wide-area discovery (Tailscale + CoreDNS)",
     hasSubcommands: true,
