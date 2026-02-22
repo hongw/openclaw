@@ -146,6 +146,34 @@ export function createAgentEventHandler({
   clearAgentRunContext,
 }: AgentEventHandlerOptions) {
   const emitChatDelta = (sessionKey: string, clientRunId: string, seq: number, text: string) => {
+    // Check if this is a new message (text doesn't continue from lastText)
+    // This happens when the same runId has multiple assistant messages (e.g., reply -> tool -> reply)
+    const lastText = chatRunState.buffers.get(clientRunId) ?? "";
+    if (lastText && (text.length < lastText.length || !text.startsWith(lastText))) {
+      // Message switched, flush the previous message's final state
+      const prevText = lastText.trim();
+      if (prevText) {
+        const now = Date.now();
+        const flushPayload = {
+          runId: clientRunId,
+          sessionKey,
+          seq,
+          state: "delta" as const,
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: prevText }],
+            timestamp: now,
+          },
+        };
+        if (!shouldSuppressHeartbeatBroadcast(clientRunId)) {
+          broadcast("chat", flushPayload, { dropIfSlow: true });
+        }
+        nodeSendToSession(sessionKey, "chat", flushPayload);
+      }
+      // Reset the delta throttle so new message can emit immediately
+      chatRunState.deltaSentAt.delete(clientRunId);
+    }
+
     chatRunState.buffers.set(clientRunId, text);
     const now = Date.now();
     const last = chatRunState.deltaSentAt.get(clientRunId) ?? 0;
