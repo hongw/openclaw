@@ -96,10 +96,17 @@ export async function doctorCommand(
   const configResult = await loadAndMaybeMigrateDoctorConfig({
     options,
     confirm: (p) => prompter.confirm(p),
+    configPath: options.configFile,
   });
   let cfg: OpenClawConfig = configResult.cfg;
   const cfgForPersistence = structuredClone(cfg);
   const sourceConfigValid = configResult.sourceConfigValid ?? true;
+
+  // --config-file mode: validate config only, skip other doctor checks
+  if (options.configFile) {
+    outro("Config validation complete");
+    return;
+  }
 
   const configPath = configResult.path ?? CONFIG_PATH;
   if (!cfg.gateway?.mode) {

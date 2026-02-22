@@ -1112,8 +1112,10 @@ export function loadConfig(): OpenClawConfig {
   return config;
 }
 
-export async function readConfigFileSnapshot(): Promise<ConfigFileSnapshot> {
-  return await createConfigIO().readConfigFileSnapshot();
+export async function readConfigFileSnapshot(
+  configPath?: string,
+): Promise<ConfigFileSnapshot> {
+  return await createConfigIO(configPath ? { configPath } : undefined).readConfigFileSnapshot();
 }
 
 export async function readConfigFileSnapshotForWrite(): Promise<ReadConfigFileSnapshotForWriteResult> {
