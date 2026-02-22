@@ -39,6 +39,9 @@ const processSchema = Type.Object({
   eof: Type.Optional(Type.Boolean({ description: "Close stdin after write" })),
   offset: Type.Optional(Type.Number({ description: "Log offset" })),
   limit: Type.Optional(Type.Number({ description: "Log length" })),
+  waitMs: Type.Optional(
+    Type.Number({ description: "Max ms to wait for process exit (poll only); blocks until done or timeout" }),
+  ),
 });
 
 export function createProcessTool(
@@ -81,6 +84,7 @@ export function createProcessTool(
         eof?: boolean;
         offset?: number;
         limit?: number;
+        waitMs?: number;
       };
 
       if (params.action === "list") {
@@ -192,6 +196,17 @@ export function createProcessTool(
               ],
               details: { status: "failed" },
             };
+          }
+          // If waitMs is set, block until process exits or timeout.
+          // waitMs <= 0 is treated as "no wait" (same as not setting it).
+          // Note: if process exits during wait, markExited() may be called twice
+          // (once by exec's handleExit, once below). This is known behavior;
+          // minor impact is endedAt timestamp may be slightly off.
+          if (typeof params.waitMs === "number" && params.waitMs > 0 && !scopedSession.exited) {
+            const deadline = Date.now() + params.waitMs;
+            while (Date.now() < deadline && !scopedSession.exited) {
+              await new Promise((r) => setTimeout(r, 200));
+            }
           }
           const { stdout, stderr } = drainSession(scopedSession);
           const exited = scopedSession.exited;
