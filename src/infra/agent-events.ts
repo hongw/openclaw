@@ -17,10 +17,32 @@ export type AgentRunContext = {
   isHeartbeat?: boolean;
 };
 
-// Keep per-run counters so streams stay strictly monotonic per runId.
-const seqByRun = new Map<string, number>();
-const listeners = new Set<(evt: AgentEventPayload) => void>();
-const runContextById = new Map<string, AgentRunContext>();
+// Use globalThis to ensure singleton state survives bundler code-splitting.
+// Without this, tsdown/rolldown may duplicate these Maps/Sets across chunks,
+// causing listeners registered in one chunk to be invisible to emitters in another.
+// See: https://github.com/openclaw/openclaw/issues/14406
+const GLOBAL_KEY_SEQ = "__openclaw_agent_event_seqByRun";
+const GLOBAL_KEY_LISTENERS = "__openclaw_agent_event_listeners";
+const GLOBAL_KEY_CONTEXT = "__openclaw_agent_event_runContext";
+
+const seqByRun: Map<string, number> =
+  ((globalThis as Record<string, unknown>)[GLOBAL_KEY_SEQ] as Map<string, number>) ??
+  ((globalThis as Record<string, unknown>)[GLOBAL_KEY_SEQ] = new Map<string, number>());
+
+const listeners: Set<(evt: AgentEventPayload) => void> =
+  ((globalThis as Record<string, unknown>)[GLOBAL_KEY_LISTENERS] as Set<
+    (evt: AgentEventPayload) => void
+  >) ??
+  ((globalThis as Record<string, unknown>)[GLOBAL_KEY_LISTENERS] = new Set<
+    (evt: AgentEventPayload) => void
+  >());
+
+const runContextById: Map<string, AgentRunContext> =
+  ((globalThis as Record<string, unknown>)[GLOBAL_KEY_CONTEXT] as Map<string, AgentRunContext>) ??
+  ((globalThis as Record<string, unknown>)[GLOBAL_KEY_CONTEXT] = new Map<
+    string,
+    AgentRunContext
+  >());
 
 export function registerAgentRunContext(runId: string, context: AgentRunContext) {
   if (!runId) {
