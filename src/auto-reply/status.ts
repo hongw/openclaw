@@ -34,6 +34,7 @@ import {
   resolveTtsPrefsPath,
 } from "../tts/tts.js";
 import {
+  estimateUsageCost,
   formatTokenCount as formatTokenCountShared,
   formatUsd,
   resolveModelCostConfig,
@@ -289,133 +290,43 @@ const readUsageFromSessionLog = (
   }
 };
 
-const formatTokenUsageLine = (entry?: SessionEntry | null) => {
-  if (!entry) {
+const formatUsagePair = (input?: number | null, output?: number | null) => {
+  if (input == null && output == null) {
     return null;
   }
-  const lines: string[] = [];
-
-  // Turn tokens (include cache in total input)
-  const turnInput = entry.inputTokens ?? 0;
-  const turnOutput = entry.outputTokens ?? 0;
-  const turnCacheRead = entry.cacheRead ?? 0;
-  const turnCacheWrite = entry.cacheWrite ?? 0;
-  const turnTotalIn = turnInput + turnCacheRead + turnCacheWrite;
-
-  if (turnTotalIn > 0 || turnOutput > 0) {
-    let turnPart = ` · Turn: ${formatTokenCount(turnTotalIn)}↙ ${formatTokenCount(turnOutput)}↗`;
-    if (turnCacheRead > 0 || turnCacheWrite > 0) {
-      turnPart += ` (♻️${formatTokenCount(turnCacheRead)}↙ ${formatTokenCount(turnCacheWrite)}↗)`;
-    }
-    lines.push(turnPart);
-  }
-
-  // Session (Current) tokens - total input includes cache
-  const sessionIn = entry.sessionInputTokens ?? 0;
-  const sessionOut = entry.sessionOutputTokens ?? 0;
-  const sessionCacheRead = entry.sessionCacheRead ?? 0;
-  const sessionCacheWrite = entry.sessionCacheWrite ?? 0;
-  const sessionTotalIn = sessionIn + sessionCacheRead + sessionCacheWrite;
-
-  if (sessionTotalIn > 0 || sessionOut > 0) {
-    let sessionPart = ` · Current: ${formatTokenCount(sessionTotalIn)}↙ ${formatTokenCount(sessionOut)}↗`;
-    if (sessionCacheRead > 0 || sessionCacheWrite > 0) {
-      sessionPart += ` (♻️${formatTokenCount(sessionCacheRead)}↙ ${formatTokenCount(sessionCacheWrite)}↗)`;
-    }
-    lines.push(sessionPart);
-  }
-
-  // Lifetime tokens - total input includes cache
-  const lifetimeIn = entry.lifetimeInputTokens ?? 0;
-  const lifetimeOut = entry.lifetimeOutputTokens ?? 0;
-  const lifetimeCacheRead = entry.lifetimeCacheRead ?? 0;
-  const lifetimeCacheWrite = entry.lifetimeCacheWrite ?? 0;
-  const lifetimeTotalIn = lifetimeIn + lifetimeCacheRead + lifetimeCacheWrite;
-
-  if (lifetimeTotalIn > 0 || lifetimeOut > 0) {
-    let lifetimePart = ` · Lifetime: ${formatTokenCount(lifetimeTotalIn)}↙ ${formatTokenCount(lifetimeOut)}↗`;
-    if (lifetimeCacheRead > 0 || lifetimeCacheWrite > 0) {
-      lifetimePart += ` (♻️${formatTokenCount(lifetimeCacheRead)}↙ ${formatTokenCount(lifetimeCacheWrite)}↗)`;
-    }
-    lines.push(lifetimePart);
-  }
-
-  if (lines.length === 0) {
-    return null;
-  }
-
-  return `🧮 Token Usage\n${lines.join("\n")}`;
+  const inputLabel = typeof input === "number" ? formatTokenCount(input) : "?";
+  const outputLabel = typeof output === "number" ? formatTokenCount(output) : "?";
+  return `🧮 Tokens: ${inputLabel} in / ${outputLabel} out`;
 };
 
-type CostConfig = {
-  input: number;
-  output: number;
-  cacheRead: number;
-  cacheWrite: number;
-};
-
-const formatCostLine = (
-  entry: SessionEntry | null | undefined,
-  costConfig: CostConfig | undefined,
-  showCost: boolean,
+const formatCacheLine = (
+  input?: number | null,
+  cacheRead?: number | null,
+  cacheWrite?: number | null,
 ) => {
-  if (!entry || !costConfig || !showCost) {
+  if (!cacheRead && !cacheWrite) {
+    return null;
+  }
+  if (
+    (typeof cacheRead !== "number" || cacheRead <= 0) &&
+    (typeof cacheWrite !== "number" || cacheWrite <= 0)
+  ) {
     return null;
   }
 
-  const lines: string[] = [];
+  const cachedLabel = typeof cacheRead === "number" ? formatTokenCount(cacheRead) : "0";
+  const newLabel = typeof cacheWrite === "number" ? formatTokenCount(cacheWrite) : "0";
 
-  // Helper to calculate cost from tokens
-  // Cost config is per 1M tokens, so divide by 1e6
-  // Note: Uses current model pricing for all levels.
-  // Model changes within session affect accuracy, but keeps implementation simple.
-  const calcCost = (input: number, output: number, cacheRead: number, cacheWrite: number) => {
-    const total =
-      input * costConfig.input +
-      output * costConfig.output +
-      cacheRead * costConfig.cacheRead +
-      cacheWrite * costConfig.cacheWrite;
-    return Number.isFinite(total) ? total / 1e6 : undefined;
-  };
+  const totalInput =
+    (typeof cacheRead === "number" ? cacheRead : 0) +
+    (typeof cacheWrite === "number" ? cacheWrite : 0) +
+    (typeof input === "number" ? input : 0);
+  const hitRate =
+    totalInput > 0 && typeof cacheRead === "number"
+      ? Math.round((cacheRead / totalInput) * 100)
+      : 0;
 
-  // Turn cost
-  const turnCost = calcCost(
-    entry.inputTokens ?? 0,
-    entry.outputTokens ?? 0,
-    entry.cacheRead ?? 0,
-    entry.cacheWrite ?? 0,
-  );
-  if (turnCost !== undefined && turnCost > 0) {
-    lines.push(` · Turn: ${formatUsd(turnCost)}`);
-  }
-
-  // Current (session) cost
-  const sessionCost = calcCost(
-    entry.sessionInputTokens ?? 0,
-    entry.sessionOutputTokens ?? 0,
-    entry.sessionCacheRead ?? 0,
-    entry.sessionCacheWrite ?? 0,
-  );
-  if (sessionCost !== undefined && sessionCost > 0) {
-    lines.push(` · Current: ${formatUsd(sessionCost)}`);
-  }
-
-  // Lifetime cost
-  const lifetimeCost = calcCost(
-    entry.lifetimeInputTokens ?? 0,
-    entry.lifetimeOutputTokens ?? 0,
-    entry.lifetimeCacheRead ?? 0,
-    entry.lifetimeCacheWrite ?? 0,
-  );
-  if (lifetimeCost !== undefined && lifetimeCost > 0) {
-    lines.push(` · Lifetime: ${formatUsd(lifetimeCost)}`);
-  }
-
-  if (lines.length === 0) {
-    return null;
-  }
-
-  return `💵 Cost\n${lines.join("\n")}`;
+  return `🗄️ Cache: ${hitRate}% hit · ${cachedLabel} cached, ${newLabel} new`;
 };
 
 const formatMediaUnderstandingLine = (decisions?: ReadonlyArray<MediaUnderstandingDecision>) => {
@@ -644,6 +555,18 @@ export function buildStatusMessage(args: StatusArgs): string {
         config: args.config,
       })
     : undefined;
+  const hasUsage = typeof inputTokens === "number" || typeof outputTokens === "number";
+  const cost =
+    showCost && hasUsage
+      ? estimateUsageCost({
+          usage: {
+            input: inputTokens ?? undefined,
+            output: outputTokens ?? undefined,
+          },
+          cost: costConfig,
+        })
+      : undefined;
+  const costLabel = showCost && hasUsage ? formatUsd(cost) : undefined;
 
   const selectedAuthLabel = selectedAuthLabelValue ? ` · 🔑 ${selectedAuthLabelValue}` : "";
   const channelModelNote = (() => {
@@ -694,8 +617,11 @@ export function buildStatusMessage(args: StatusArgs): string {
     : null;
   const commit = resolveCommitHash();
   const versionLine = `🦞 OpenClaw ${VERSION}${commit ? ` (${commit})` : ""}`;
-  const tokenUsageLine = formatTokenUsageLine(entry);
-  const costLine = formatCostLine(entry, costConfig, showCost);
+  const usagePair = formatUsagePair(inputTokens, outputTokens);
+  const cacheLine = formatCacheLine(inputTokens, cacheRead, cacheWrite);
+  const costLine = costLabel ? `💵 Cost: ${costLabel}` : null;
+  const usageCostLine =
+    usagePair && costLine ? `${usagePair} · ${costLine}` : (usagePair ?? costLine);
   const mediaLine = formatMediaUnderstandingLine(args.mediaDecisions);
   const voiceLine = formatVoiceModeLine(args.config, args.sessionEntry);
 
@@ -704,8 +630,8 @@ export function buildStatusMessage(args: StatusArgs): string {
     args.timeLine,
     modelLine,
     fallbackLine,
-    tokenUsageLine,
-    costLine,
+    usageCostLine,
+    cacheLine,
     `📚 ${contextLine}`,
     mediaLine,
     args.usageLine,
