@@ -188,7 +188,17 @@ export async function runPreparedReply(
   const inboundMetaPrompt = buildInboundMetaSystemPrompt(
     isNewSession ? sessionCtx : { ...sessionCtx, ThreadStarterBody: undefined },
   );
-  const extraSystemPrompt = [inboundMetaPrompt, groupChatContext, groupIntro, groupSystemPrompt]
+  
+  // Load session-specific prompt file from workspace/prompts/{sessionKey}.md
+  const { loadSessionPromptFile } = await import("../../agents/session-prompts.js");
+  const sessionPromptFile = sessionKey
+    ? await loadSessionPromptFile({
+        sessionKey,
+        workspaceDir,
+      })
+    : undefined;
+  
+  const extraSystemPrompt = [inboundMetaPrompt, groupChatContext, groupIntro, groupSystemPrompt, sessionPromptFile]
     .filter(Boolean)
     .join("\n\n");
   const baseBody = sessionCtx.BodyStripped ?? sessionCtx.Body ?? "";
