@@ -124,6 +124,9 @@ RUN npm install -g clawhub
 # Install Playwright MCP globally (browser automation via MCP)
 RUN npm install -g @playwright/mcp
 
+# Install DuckDuckGo MCP globally (free web search via MCP)
+RUN npm install -g @oevortex/ddg_search
+
 ENV NODE_ENV=production
 
 # Allow non-root user to write temp files during runtime/tests.
