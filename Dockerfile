@@ -14,7 +14,14 @@ RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       curl \
       gpg \
-      lsb-release && \
+      lsb-release \
+      jq \
+      less \
+      tree \
+      zip \
+      netcat-openbsd \
+      htop \
+      ripgrep && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
