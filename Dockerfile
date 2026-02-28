@@ -21,7 +21,8 @@ RUN apt-get update && \
       zip \
       netcat-openbsd \
       htop \
-      ripgrep && \
+      ripgrep \
+      time && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
