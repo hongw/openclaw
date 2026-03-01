@@ -135,6 +135,9 @@ RUN npm install -g @playwright/mcp
 # Install DuckDuckGo MCP globally (free web search via MCP)
 RUN npm install -g @oevortex/ddg_search
 
+# Install Azure DevOps MCP globally (ADO integration via MCP)
+RUN npm install -g @azure-devops/mcp
+
 ENV NODE_ENV=production
 
 # Allow non-root user to write temp files during runtime/tests.
