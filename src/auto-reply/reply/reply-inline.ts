@@ -8,6 +8,15 @@ const INLINE_SIMPLE_COMMAND_RE = /(?:^|\s)\/(help|commands|whoami|id)(?=$|\s|:)/
 
 const INLINE_STATUS_RE = /(?:^|\s)\/status(?=$|\s|:)(?:\s*:\s*)?/gi;
 
+function normalizeDirectiveCleanedText(input: string): string {
+  return input
+    .replaceAll("\r\n", "\n")
+    .replaceAll("\r", "\n")
+    .replace(/[^\S\n]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .trim();
+}
+
 export function extractInlineSimpleCommand(body?: string): {
   command: string;
   cleaned: string;
@@ -24,7 +33,7 @@ export function extractInlineSimpleCommand(body?: string): {
   if (!command) {
     return null;
   }
-  const cleaned = body.replace(match[0], " ").replace(/\s+/g, " ").trim();
+  const cleaned = normalizeDirectiveCleanedText(body.replace(match[0], " "));
   return { command, cleaned };
 }
 
@@ -36,6 +45,6 @@ export function stripInlineStatus(body: string): {
   if (!trimmed) {
     return { cleaned: "", didStrip: false };
   }
-  const cleaned = trimmed.replace(INLINE_STATUS_RE, " ").replace(/\s+/g, " ").trim();
+  const cleaned = normalizeDirectiveCleanedText(trimmed.replace(INLINE_STATUS_RE, " "));
   return { cleaned, didStrip: cleaned !== trimmed };
 }
