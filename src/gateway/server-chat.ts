@@ -276,6 +276,42 @@ export function createAgentEventHandler({
   clearAgentRunContext,
   toolEventRecipients,
 }: AgentEventHandlerOptions) {
+  const flushBufferedChatDelta = (
+    sessionKey: string,
+    clientRunId: string,
+    sourceRunId: string,
+    seq: number,
+    opts?: { onlyIfThrottled?: boolean },
+  ) => {
+    const bufferedText = chatRunState.buffers.get(clientRunId) ?? "";
+    if (!bufferedText || shouldHideHeartbeatChatOutput(clientRunId, sourceRunId)) {
+      return;
+    }
+
+    if (opts?.onlyIfThrottled) {
+      const now = Date.now();
+      const last = chatRunState.deltaSentAt.get(clientRunId) ?? 0;
+      if (now - last >= 150) {
+        return;
+      }
+    }
+
+    const now = Date.now();
+    const payload = {
+      runId: clientRunId,
+      sessionKey,
+      seq,
+      state: "delta" as const,
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: bufferedText }],
+        timestamp: now,
+      },
+    };
+    broadcast("chat", payload, { dropIfSlow: true });
+    nodeSendToSession(sessionKey, "chat", payload);
+  };
+
   const emitChatDelta = (
     sessionKey: string,
     clientRunId: string,
@@ -293,23 +329,8 @@ export function createAgentEventHandler({
     // to be lost when switching to a new message.
     const lastText = chatRunState.buffers.get(clientRunId) ?? "";
     if (lastText && (text.length < lastText.length || !text.startsWith(lastText))) {
-      // Only flush if there's content and it's not a heartbeat that should be hidden
-      if (lastText && !shouldHideHeartbeatChatOutput(clientRunId, sourceRunId)) {
-        const now = Date.now();
-        const flushPayload = {
-          runId: clientRunId,
-          sessionKey,
-          seq,
-          state: "delta" as const,
-          message: {
-            role: "assistant",
-            content: [{ type: "text", text: lastText }],
-            timestamp: now,
-          },
-        };
-        broadcast("chat", flushPayload, { dropIfSlow: true });
-        nodeSendToSession(sessionKey, "chat", flushPayload);
-      }
+      // Flush previous message before switching to the next one.
+      flushBufferedChatDelta(sessionKey, clientRunId, sourceRunId, seq);
       // Reset throttle so the new message can emit immediately
       chatRunState.deltaSentAt.delete(clientRunId);
     }
@@ -473,6 +494,11 @@ export function createAgentEventHandler({
       // WS clients already received the event above via broadcastToConnIds.
       if (!isToolEvent || toolVerbose !== "off") {
         nodeSendToSession(sessionKey, "agent", isToolEvent ? toolPayload : agentPayload);
+      }
+      // If tool execution starts right after an assistant delta, flush buffered text immediately
+      // so the user doesn't wait for a long tool call to see the final fragment.
+      if (!isAborted && isToolEvent) {
+        flushBufferedChatDelta(sessionKey, clientRunId, evt.runId, evt.seq, { onlyIfThrottled: true });
       }
       if (!isAborted && evt.stream === "assistant" && typeof evt.data?.text === "string") {
         emitChatDelta(sessionKey, clientRunId, evt.runId, evt.seq, evt.data.text);
