@@ -143,6 +143,7 @@ export type ChatRunState = {
   registry: ChatRunRegistry;
   buffers: Map<string, string>;
   deltaSentAt: Map<string, number>;
+  lastSentText: Map<string, string>;
   abortedRuns: Map<string, number>;
   clear: () => void;
 };
@@ -151,12 +152,14 @@ export function createChatRunState(): ChatRunState {
   const registry = createChatRunRegistry();
   const buffers = new Map<string, string>();
   const deltaSentAt = new Map<string, number>();
+  const lastSentText = new Map<string, string>();
   const abortedRuns = new Map<string, number>();
 
   const clear = () => {
     registry.clear();
     buffers.clear();
     deltaSentAt.clear();
+    lastSentText.clear();
     abortedRuns.clear();
   };
 
@@ -164,6 +167,7 @@ export function createChatRunState(): ChatRunState {
     registry,
     buffers,
     deltaSentAt,
+    lastSentText,
     abortedRuns,
     clear,
   };
@@ -276,6 +280,42 @@ export function createAgentEventHandler({
   clearAgentRunContext,
   toolEventRecipients,
 }: AgentEventHandlerOptions) {
+  const flushBufferedChatDelta = (
+    sessionKey: string,
+    clientRunId: string,
+    sourceRunId: string,
+    seq: number,
+    opts?: { onlyIfUnsynced?: boolean },
+  ) => {
+    const bufferedText = chatRunState.buffers.get(clientRunId) ?? "";
+    if (!bufferedText || shouldHideHeartbeatChatOutput(clientRunId, sourceRunId)) {
+      return;
+    }
+
+    if (opts?.onlyIfUnsynced) {
+      const lastSentText = chatRunState.lastSentText.get(clientRunId) ?? "";
+      if (bufferedText === lastSentText) {
+        return;
+      }
+    }
+
+    const now = Date.now();
+    const payload = {
+      runId: clientRunId,
+      sessionKey,
+      seq,
+      state: "delta" as const,
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: bufferedText }],
+        timestamp: now,
+      },
+    };
+    broadcast("chat", payload, { dropIfSlow: true });
+    nodeSendToSession(sessionKey, "chat", payload);
+    chatRunState.lastSentText.set(clientRunId, bufferedText);
+  };
+
   const emitChatDelta = (
     sessionKey: string,
     clientRunId: string,
@@ -286,6 +326,19 @@ export function createAgentEventHandler({
     if (isSilentReplyText(text, SILENT_REPLY_TOKEN)) {
       return;
     }
+
+    // Detect message boundary within the same clientRunId stream.
+    // This happens when one run produces multiple assistant messages (e.g., reply -> tool -> reply).
+    // Without this, the 150ms throttle can cause the last few characters of the previous message
+    // to be lost when switching to a new message.
+    const lastText = chatRunState.buffers.get(clientRunId) ?? "";
+    if (lastText && (text.length < lastText.length || !text.startsWith(lastText))) {
+      // Flush previous message before switching to the next one.
+      flushBufferedChatDelta(sessionKey, clientRunId, sourceRunId, seq);
+      // Reset throttle so the new message can emit immediately
+      chatRunState.deltaSentAt.delete(clientRunId);
+    }
+
     chatRunState.buffers.set(clientRunId, text);
     if (shouldHideHeartbeatChatOutput(clientRunId, sourceRunId)) {
       return;
@@ -309,6 +362,7 @@ export function createAgentEventHandler({
     };
     broadcast("chat", payload, { dropIfSlow: true });
     nodeSendToSession(sessionKey, "chat", payload);
+    chatRunState.lastSentText.set(clientRunId, text);
   };
 
   const emitChatFinal = (
@@ -330,6 +384,7 @@ export function createAgentEventHandler({
       normalizedHeartbeatText.suppress || isSilentReplyText(text, SILENT_REPLY_TOKEN);
     chatRunState.buffers.delete(clientRunId);
     chatRunState.deltaSentAt.delete(clientRunId);
+    chatRunState.lastSentText.delete(clientRunId);
     if (jobState === "done") {
       const payload = {
         runId: clientRunId,
@@ -446,6 +501,11 @@ export function createAgentEventHandler({
       if (!isToolEvent || toolVerbose !== "off") {
         nodeSendToSession(sessionKey, "agent", isToolEvent ? toolPayload : agentPayload);
       }
+      // If tool execution starts after assistant output, flush any unsynced buffered text
+      // so the user doesn't wait for a long tool call to see the final fragment.
+      if (!isAborted && isToolEvent) {
+        flushBufferedChatDelta(sessionKey, clientRunId, evt.runId, evt.seq, { onlyIfUnsynced: true });
+      }
       if (!isAborted && evt.stream === "assistant" && typeof evt.data?.text === "string") {
         emitChatDelta(sessionKey, clientRunId, evt.runId, evt.seq, evt.data.text);
       } else if (!isAborted && (lifecyclePhase === "end" || lifecyclePhase === "error")) {
@@ -478,6 +538,7 @@ export function createAgentEventHandler({
         chatRunState.abortedRuns.delete(evt.runId);
         chatRunState.buffers.delete(clientRunId);
         chatRunState.deltaSentAt.delete(clientRunId);
+        chatRunState.lastSentText.delete(clientRunId);
         if (chatLink) {
           chatRunState.registry.remove(evt.runId, clientRunId, sessionKey);
         }
