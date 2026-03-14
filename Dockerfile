@@ -131,7 +131,7 @@ WORKDIR /app
 # On the full bookworm image these are already installed (apt-get is a no-op).
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      procps hostname curl git openssl && \
+      procps hostname curl git openssl tini && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN chown node:node /app
@@ -232,7 +232,7 @@ RUN chmod 755 /entrypoint.sh
 # This reduces the attack surface by preventing container escape via root privileges
 USER node
 
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["tini", "--", "/entrypoint.sh"]
 
 # Start gateway server with default config.
 # Binds to loopback (127.0.0.1) by default for security.
