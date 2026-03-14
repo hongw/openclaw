@@ -350,8 +350,21 @@ export function createAgentEventHandler({
     const cleanedDelta =
       typeof delta === "string" ? stripInlineDirectiveTagsForDisplay(delta).text : "";
     const previousText = chatRunState.buffers.get(clientRunId) ?? "";
+
+    // Detect message boundary within the same clientRunId stream.
+    // When a run produces multiple assistant messages (e.g. reply → tool → reply),
+    // the new message text won't be a continuation of the previous buffer.
+    // Flush the old buffer and reset state so the new message starts clean.
+    if (previousText && cleanedText && !cleanedText.startsWith(previousText) && cleanedText.length < previousText.length) {
+      flushBufferedChatDeltaIfNeeded(sessionKey, clientRunId, sourceRunId, seq);
+      chatRunState.buffers.delete(clientRunId);
+      chatRunState.deltaSentAt.delete(clientRunId);
+      chatRunState.deltaLastBroadcastLen.delete(clientRunId);
+    }
+
+    const currentPreviousText = chatRunState.buffers.get(clientRunId) ?? "";
     const mergedText = resolveMergedAssistantText({
-      previousText,
+      previousText: currentPreviousText,
       nextText: cleanedText,
       nextDelta: cleanedDelta,
     });
