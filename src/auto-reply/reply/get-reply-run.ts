@@ -268,11 +268,21 @@ export async function runPreparedReply(
   const inboundMetaPrompt = buildInboundMetaSystemPrompt(
     isNewSession ? sessionCtx : { ...sessionCtx, ThreadStarterBody: undefined },
   );
+  // Load session-specific prompt file from workspace/prompts/{sessionKey}.md
+  const { loadSessionPromptFile } = await import("../../agents/session-prompts.js");
+  const sessionPromptFile = sessionKey
+    ? await loadSessionPromptFile({
+        sessionKey,
+        workspaceDir,
+      })
+    : undefined;
+
   const extraSystemPromptParts = [
     inboundMetaPrompt,
     groupChatContext,
     groupIntro,
     groupSystemPrompt,
+    sessionPromptFile,
   ].filter(Boolean);
   const baseBody = sessionCtx.BodyStripped ?? sessionCtx.Body ?? "";
   // Use CommandBody/RawBody for bare reset detection (clean message without structural context).
