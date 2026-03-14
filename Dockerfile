@@ -1,4 +1,8 @@
-FROM node:22-bookworm@sha256:cd7bcd2e7a1e6f72052feb023c7f6b722205d3fcab7bbcbd2d1bfdab10b1e935
+# Base image for OpenClaw app builds.
+# bot-scripts/Dockerfile.base produces a pre-installed base image for personal-fork tooling.
+# If you change this default BASE_IMAGE value, update bot-scripts/Dockerfile.base FROM accordingly.
+ARG BASE_IMAGE=node:22-bookworm@sha256:cd7bcd2e7a1e6f72052feb023c7f6b722205d3fcab7bbcbd2d1bfdab10b1e935
+FROM ${BASE_IMAGE}
 
 # Install Bun (required for build scripts)
 RUN curl -fsSL https://bun.sh/install | bash
@@ -8,6 +12,7 @@ RUN corepack enable
 
 WORKDIR /app
 RUN chown node:node /app
+
 
 ARG OPENCLAW_DOCKER_APT_PACKAGES=""
 RUN if [ -n "$OPENCLAW_DOCKER_APT_PACKAGES" ]; then \
@@ -51,15 +56,20 @@ RUN pnpm ui:build
 
 ENV NODE_ENV=production
 
+# Allow non-root user to write temp files during runtime/tests.
+USER root
+RUN chown -R node:node /app
+
+# Copy entrypoint script (SSH starts only if /home/node/.ssh/authorized_keys exists)
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Security hardening: Run as non-root user
 # The node:22-bookworm image includes a 'node' user (uid 1000)
 # This reduces the attack surface by preventing container escape via root privileges
 USER node
 
-# Start gateway server with default config.
-# Binds to loopback (127.0.0.1) by default for security.
-#
-# For container platforms requiring external health checks:
-#   1. Set OPENCLAW_GATEWAY_TOKEN or OPENCLAW_GATEWAY_PASSWORD env var
-#   2. Override CMD: ["node","openclaw.mjs","gateway","--allow-unconfigured","--bind","lan"]
-CMD ["node", "openclaw.mjs", "gateway", "--allow-unconfigured"]
+# Expose SSH port
+EXPOSE 22222
+
+CMD ["/entrypoint.sh"]
