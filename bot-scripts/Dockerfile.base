@@ -82,12 +82,14 @@ RUN npm install -g @playwright/mcp
 RUN npm install -g @oevortex/ddg_search
 RUN npm install -g @azure-devops/mcp
 
-# Pre-install WeChat channel plugin (loaded by OpenClaw at runtime via extensions/)
-RUN mkdir -p /tmp/weixin-plugin /app/extensions/openclaw-weixin && \
+# Pre-install WeChat channel plugin to staging dir (not /app/extensions/ to
+# avoid polluting pnpm lockfile during build stage). The main Dockerfile
+# copies this into /app/extensions/ in the runtime stage.
+RUN mkdir -p /tmp/weixin-plugin /opt/openclaw-plugins/openclaw-weixin && \
     cd /tmp/weixin-plugin && \
     npm pack @tencent-weixin/openclaw-weixin && \
-    tar -xzf tencent-weixin-openclaw-weixin-*.tgz --strip-components=1 -C /app/extensions/openclaw-weixin && \
-    cd /app/extensions/openclaw-weixin && \
+    tar -xzf tencent-weixin-openclaw-weixin-*.tgz --strip-components=1 -C /opt/openclaw-plugins/openclaw-weixin && \
+    cd /opt/openclaw-plugins/openclaw-weixin && \
     npm install --ignore-scripts --omit=dev && \
     rm -rf /tmp/weixin-plugin
 

@@ -141,6 +141,8 @@ COPY --from=runtime-assets --chown=node:node /app/node_modules ./node_modules
 COPY --from=runtime-assets --chown=node:node /app/package.json .
 COPY --from=runtime-assets --chown=node:node /app/openclaw.mjs .
 COPY --from=runtime-assets --chown=node:node /app/extensions ./extensions
+# Copy pre-installed third-party plugins from base image staging dir
+COPY --chown=node:node /opt/openclaw-plugins/openclaw-weixin ./extensions/openclaw-weixin
 COPY --from=runtime-assets --chown=node:node /app/skills ./skills
 COPY --from=runtime-assets --chown=node:node /app/docs ./docs
 
