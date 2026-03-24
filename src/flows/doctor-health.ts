@@ -46,7 +46,14 @@ export async function doctorCommand(runtime?: RuntimeEnv, options: DoctorOptions
     confirm: (p) => prompter.confirm(p),
     runtime: effectiveRuntime,
     prompter,
+    configPath: options.configFile,
   });
+
+  // --config-file mode: validate config only, skip other doctor checks
+  if (options.configFile) {
+    outro("Config validation complete");
+    return;
+  }
   const { CONFIG_PATH } = await import("../config/config.js");
   const ctx = {
     runtime: effectiveRuntime,

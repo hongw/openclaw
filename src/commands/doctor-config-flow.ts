@@ -1,5 +1,6 @@
 import { formatCliCommand } from "../cli/command-format.js";
 import { findLegacyConfigIssues } from "../config/legacy.js";
+import { readConfigFileSnapshot } from "../config/io.js";
 import { CONFIG_PATH } from "../config/paths.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import type { RuntimeEnv } from "../runtime.js";
@@ -42,11 +43,24 @@ export async function loadAndMaybeMigrateDoctorConfig(params: {
   confirm: (p: { message: string; initialValue: boolean }) => Promise<boolean>;
   runtime?: RuntimeEnv;
   prompter?: DoctorPrompter;
+  configPath?: string;
 }) {
   const shouldRepair = params.options.repair === true || params.options.yes === true;
-  const preflight = await runDoctorConfigPreflight({ repairPrefixedConfig: shouldRepair });
-  let snapshot = preflight.snapshot;
-  const baseCfg = preflight.baseConfig;
+
+  let snapshot;
+  let baseCfg;
+  if (params.configPath) {
+    // --config-file mode: validate a specific file, skip preflight migrations
+    snapshot = await readConfigFileSnapshot(params.configPath);
+    baseCfg = snapshot.sourceConfig ?? snapshot.config ?? {};
+    if (snapshot.exists && !snapshot.valid) {
+      note("Config invalid; doctor will run with best-effort config.", "Config");
+    }
+  } else {
+    const preflight = await runDoctorConfigPreflight({ repairPrefixedConfig: shouldRepair });
+    snapshot = preflight.snapshot;
+    baseCfg = preflight.baseConfig;
+  }
   let cfg: OpenClawConfig = baseCfg;
   let candidate = structuredClone(baseCfg);
   let pendingChanges = false;
