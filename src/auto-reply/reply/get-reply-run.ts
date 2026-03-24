@@ -299,6 +299,15 @@ export async function runPreparedReply(
     isNewSession ? sessionCtx : { ...sessionCtx, ThreadStarterBody: undefined },
     { includeFormattingHints: !useFastReplyRuntime },
   );
+  // Load session-specific prompt file from workspace/prompts/{sessionKey}.md
+  const { loadSessionPromptFile } = await import("../../agents/session-prompts.js");
+  const sessionPromptFile = sessionKey
+    ? await loadSessionPromptFile({
+        sessionKey,
+        workspaceDir,
+      })
+    : undefined;
+
   const extraSystemPromptParts = [
     inboundMetaPrompt,
     groupChatContext,
@@ -310,6 +319,7 @@ export async function runPreparedReply(
       fullAccessAvailable: fullAccessState.available,
       fullAccessBlockedReason: fullAccessState.blockedReason,
     }),
+    sessionPromptFile,
   ].filter(Boolean);
   // Static parts only (no per-message inbound metadata) for CLI session reuse hashing.
   const extraSystemPromptStaticParts = [
