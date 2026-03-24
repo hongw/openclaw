@@ -1,3 +1,5 @@
+import fs from "node:fs";
+
 import type { Command } from "commander";
 import type { CronJob } from "../../cron/types.js";
 import { sanitizeAgentId } from "../../routing/session-key.js";
@@ -88,7 +90,7 @@ export function registerCronAddCommand(cron: Command) {
       .option("--stagger <duration>", "Cron stagger window (e.g. 30s, 5m)")
       .option("--exact", "Disable cron staggering (set stagger to 0)", false)
       .option("--system-event <text>", "System event payload (main session)")
-      .option("--message <text>", "Agent message payload")
+      .option("--message <text>", "Agent message payload (use @file to read from file)")
       .option(
         "--thinking <level>",
         "Thinking level for agent jobs (off|minimal|low|medium|high|xhigh)",
@@ -136,7 +138,23 @@ export function registerCronAddCommand(cron: Command) {
 
           const payload = (() => {
             const systemEvent = normalizeOptionalString(opts.systemEvent) ?? "";
-            const message = normalizeOptionalString(opts.message) ?? "";
+            let message = normalizeOptionalString(opts.message) ?? "";
+
+            // Support @file syntax to read message from file (like curl)
+            if (message.startsWith("@")) {
+              const filePath = message.slice(1);
+              if (!filePath) {
+                throw new Error("Invalid @file syntax: missing file path");
+              }
+              if (!fs.existsSync(filePath)) {
+                throw new Error(`Message file not found: ${filePath}`);
+              }
+              message = fs.readFileSync(filePath, "utf-8").trim();
+              if (!message) {
+                throw new Error(`Message file is empty: ${filePath}`);
+              }
+            }
+
             const chosen = [Boolean(systemEvent), Boolean(message)].filter(Boolean).length;
             if (chosen !== 1) {
               throw new Error("Choose exactly one payload: --system-event or --message");
