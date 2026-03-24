@@ -138,12 +138,16 @@ export function createOpenClawTools(
         requireExplicitTarget: options?.requireExplicitMessageTarget,
         requesterSenderId: options?.requesterSenderId ?? undefined,
       });
+  const browserEnabled = options?.config?.browser?.enabled !== false;
+  const browserTool = browserEnabled
+    ? createBrowserTool({
+        sandboxBridgeUrl: options?.sandboxBrowserBridgeUrl,
+        allowHostControl: options?.allowHostBrowserControl,
+        agentSessionKey: options?.agentSessionKey,
+      })
+    : null;
   const tools: AnyAgentTool[] = [
-    createBrowserTool({
-      sandboxBridgeUrl: options?.sandboxBrowserBridgeUrl,
-      allowHostControl: options?.allowHostBrowserControl,
-      agentSessionKey: options?.agentSessionKey,
-    }),
+    ...(browserTool ? [browserTool] : []),
     createCanvasTool({ config: options?.config }),
     createNodesTool({
       agentSessionKey: options?.agentSessionKey,
