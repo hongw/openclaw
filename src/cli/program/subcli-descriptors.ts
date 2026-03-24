@@ -12,6 +12,7 @@ const subCliCommandCatalog = defineCommandDescriptorCatalog([
     hasSubcommands: true,
   },
   { name: "daemon", description: "Gateway service (legacy alias)", hasSubcommands: true },
+  { name: "session", description: "Manage conversation session store", hasSubcommands: true },
   { name: "logs", description: "Tail gateway file logs via RPC", hasSubcommands: false },
   {
     name: "system",
