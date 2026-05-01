@@ -113,12 +113,16 @@ export function readSessionMessages(
       const parsed = JSON.parse(line);
       if (parsed?.message) {
         messageSeq += 1;
-        messages.push(
-          attachOpenClawTranscriptMeta(parsed.message, {
-            ...(typeof parsed.id === "string" ? { id: parsed.id } : {}),
-            seq: messageSeq,
-          }),
-        );
+        const enriched = attachOpenClawTranscriptMeta(parsed.message, {
+          ...(typeof parsed.id === "string" ? { id: parsed.id } : {}),
+          seq: messageSeq,
+        });
+        // Also expose id at root level for external consumers (e.g. SoyServer history_transformer)
+        const withRootId =
+          typeof parsed.id === "string" && enriched && typeof enriched === "object"
+            ? { ...(enriched as Record<string, unknown>), id: parsed.id }
+            : enriched;
+        messages.push(withRootId);
         continue;
       }
 

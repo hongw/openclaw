@@ -1886,34 +1886,25 @@ export const chatHandlers: GatewayRequestHandlers = {
     const defaultLimit = 200;
     const requested = typeof limit === "number" ? limit : defaultLimit;
     const max = Math.min(hardMax, requested);
-    const effectiveMaxChars = resolveEffectiveChatHistoryMaxChars(cfg, maxChars);
     const sliced = rawMessages.length > max ? rawMessages.slice(-max) : rawMessages;
     const sanitized = stripEnvelopeFromMessages(sliced);
-    const normalized = augmentChatHistoryWithCanvasBlocks(
-      sanitizeChatHistoryMessages(sanitized, effectiveMaxChars),
-    );
+    const normalized = augmentChatHistoryWithCanvasBlocks(sanitized);
     const maxHistoryBytes = getMaxChatHistoryMessagesBytes();
-    const perMessageHardCap = Math.min(CHAT_HISTORY_MAX_SINGLE_MESSAGE_BYTES, maxHistoryBytes);
-    const replaced = replaceOversizedChatHistoryMessages({
-      messages: normalized,
-      maxSingleMessageBytes: perMessageHardCap,
-    });
     scheduleChatHistoryManagedImageCleanup({ sessionKey, context });
-    const capped = capArrayByJsonBytes(replaced.messages, maxHistoryBytes).items;
+    const capped = capArrayByJsonBytes(normalized, maxHistoryBytes).items;
     const bounded = enforceChatHistoryFinalBudget({ messages: capped, maxBytes: maxHistoryBytes });
-    const placeholderCount = replaced.replacedCount + bounded.placeholderCount;
-    if (placeholderCount > 0) {
-      chatHistoryPlaceholderEmitCount += placeholderCount;
+    if (bounded.placeholderCount > 0) {
+      chatHistoryPlaceholderEmitCount += bounded.placeholderCount;
       logLargePayload({
         surface: "gateway.chat.history",
         action: "truncated",
         bytes: jsonUtf8Bytes(normalized),
         limitBytes: maxHistoryBytes,
-        count: placeholderCount,
+        count: bounded.placeholderCount,
         reason: "chat_history_budget",
       });
       context.logGateway.debug(
-        `chat.history omitted oversized payloads placeholders=${placeholderCount} total=${chatHistoryPlaceholderEmitCount}`,
+        `chat.history omitted oversized payloads placeholders=${bounded.placeholderCount} total=${chatHistoryPlaceholderEmitCount}`,
       );
     }
     let thinkingLevel = entry?.thinkingLevel;
