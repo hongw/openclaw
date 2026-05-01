@@ -92,4 +92,4 @@ RUN npm install -g @azure-devops/mcp
 
 # WeChat channel plugin (OpenClaw in-process extension)
 # Loaded at runtime via plugins.load.paths config pointing to global npm path
-RUN npm install -g @tencent-weixin/openclaw-weixin@1.0.3
+RUN npm install -g @tencent-weixin/openclaw-weixin@2.3.1
