@@ -595,7 +595,7 @@ export function createAgentEventHandler({
     const isAborted =
       chatRunState.abortedRuns.has(clientRunId) || chatRunState.abortedRuns.has(evt.runId);
 
-    if (isControlUiVisible && sessionKey) {
+    if (sessionKey) {
       if (!isAborted) {
         const evtStopReason =
           typeof evt.data?.stopReason === "string" ? evt.data.stopReason : undefined;
@@ -692,8 +692,19 @@ export function createAgentEventHandler({
     const cleanedDelta =
       typeof delta === "string" ? stripInlineDirectiveTagsForDisplay(delta).text : "";
     const previousRawText = chatRunState.rawBuffers.get(clientRunId) ?? "";
+
+    // Detect message boundary within the same clientRunId stream.
+    // When a run produces multiple assistant messages (e.g. reply → tool → reply),
+    // the new message text won't be a continuation of the previous buffer.
+    // Flush the old buffer and reset state so the new message starts clean.
+    if (previousRawText && cleanedText && !cleanedText.startsWith(previousRawText) && cleanedText.length < previousRawText.length) {
+      flushBufferedChatDeltaIfNeeded(sessionKey, clientRunId, sourceRunId, seq);
+      clearBufferedChatState(clientRunId);
+    }
+
+    const currentPreviousRawText = chatRunState.rawBuffers.get(clientRunId) ?? "";
     const mergedRawText = resolveMergedAssistantText({
-      previousText: previousRawText,
+      previousText: currentPreviousRawText,
       nextText: cleanedText,
       nextDelta: cleanedDelta,
     });
@@ -970,8 +981,7 @@ export function createAgentEventHandler({
       broadcast("agent", agentPayload);
     }
 
-    if (isControlUiVisible && sessionKey) {
-      // Send tool events to node/channel subscribers only when verbose is enabled;
+    if (sessionKey) {
       // WS clients already received the event above via broadcastToConnIds.
       if (!isToolEvent || toolVerbose !== "off") {
         nodeSendToSession(
