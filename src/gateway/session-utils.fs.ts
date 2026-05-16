@@ -651,10 +651,13 @@ function parsedSessionEntryToMessage(parsed: unknown, seq: number): unknown {
   }
   const entry = parsed as Record<string, unknown>;
   if (entry.message) {
-    return attachOpenClawTranscriptMeta(entry.message, {
+    const enriched = attachOpenClawTranscriptMeta(entry.message, {
       ...(typeof entry.id === "string" ? { id: entry.id } : {}),
       seq,
     });
+    return typeof entry.id === "string" && enriched && typeof enriched === "object"
+      ? { ...(enriched as Record<string, unknown>), id: entry.id }
+      : enriched;
   }
 
   // Compaction entries are not "message" records, but they're useful context for debugging.

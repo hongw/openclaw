@@ -66,10 +66,9 @@ import {
 import {
   isToolHistoryBlockType,
   projectChatDisplayMessage,
-  projectRecentChatDisplayMessages,
   resolveEffectiveChatHistoryMaxChars,
 } from "../chat-display-projection.js";
-import { stripEnvelopeFromMessage } from "../chat-sanitize.js";
+import { stripEnvelopeFromMessage, stripEnvelopeFromMessages } from "../chat-sanitize.js";
 import { augmentChatHistoryWithCliSessionImports } from "../cli-session-history.js";
 import { isSuppressedControlReplyText } from "../control-reply-text.js";
 import {
@@ -1665,10 +1664,9 @@ export const chatHandlers: GatewayRequestHandlers = {
       );
       return;
     }
-    const { sessionKey, limit, maxChars } = params as {
+    const { sessionKey, limit } = params as {
       sessionKey: string;
       limit?: number;
-      maxChars?: number;
     };
     const { cfg, storePath, entry } = loadSessionEntry(sessionKey);
     const sessionId = entry?.sessionId;
@@ -1691,34 +1689,23 @@ export const chatHandlers: GatewayRequestHandlers = {
       provider: resolvedSessionModel.provider,
       localMessages,
     });
-    const effectiveMaxChars = resolveEffectiveChatHistoryMaxChars(cfg, maxChars);
-    const normalized = augmentChatHistoryWithCanvasBlocks(
-      projectRecentChatDisplayMessages(rawMessages, {
-        maxChars: effectiveMaxChars,
-        maxMessages: max,
-      }),
-    );
-    const perMessageHardCap = Math.min(CHAT_HISTORY_MAX_SINGLE_MESSAGE_BYTES, maxHistoryBytes);
-    const replaced = replaceOversizedChatHistoryMessages({
-      messages: normalized,
-      maxSingleMessageBytes: perMessageHardCap,
-    });
+    const sliced = rawMessages.length > max ? rawMessages.slice(-max) : rawMessages;
+    const normalized = augmentChatHistoryWithCanvasBlocks(stripEnvelopeFromMessages(sliced));
     scheduleChatHistoryManagedImageCleanup({ sessionKey, context });
-    const capped = capArrayByJsonBytes(replaced.messages, maxHistoryBytes).items;
+    const capped = capArrayByJsonBytes(normalized, maxHistoryBytes).items;
     const bounded = enforceChatHistoryFinalBudget({ messages: capped, maxBytes: maxHistoryBytes });
-    const placeholderCount = replaced.replacedCount + bounded.placeholderCount;
-    if (placeholderCount > 0) {
-      chatHistoryPlaceholderEmitCount += placeholderCount;
+    if (bounded.placeholderCount > 0) {
+      chatHistoryPlaceholderEmitCount += bounded.placeholderCount;
       logLargePayload({
         surface: "gateway.chat.history",
         action: "truncated",
         bytes: jsonUtf8Bytes(normalized),
         limitBytes: maxHistoryBytes,
-        count: placeholderCount,
+        count: bounded.placeholderCount,
         reason: "chat_history_budget",
       });
       context.logGateway.debug(
-        `chat.history omitted oversized payloads placeholders=${placeholderCount} total=${chatHistoryPlaceholderEmitCount}`,
+        `chat.history omitted oversized payloads placeholders=${bounded.placeholderCount} total=${chatHistoryPlaceholderEmitCount}`,
       );
     }
     let thinkingLevel = entry?.thinkingLevel;
