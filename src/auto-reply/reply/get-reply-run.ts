@@ -493,6 +493,11 @@ export async function runPreparedReply(
     isNewSession ? sessionCtx : { ...sessionCtx, ThreadStarterBody: undefined },
     { includeFormattingHints: !useFastReplyRuntime },
   );
+  const { loadSessionPromptFile } = await import("../../agents/session-prompts.js");
+  const sessionPromptFile = await loadSessionPromptFile({
+    sessionKey,
+    workspaceDir,
+  });
   const extraSystemPromptParts = [
     inboundMetaPrompt,
     directChatContext,
@@ -505,6 +510,7 @@ export async function runPreparedReply(
       fullAccessAvailable: fullAccessState.available,
       fullAccessBlockedReason: fullAccessState.blockedReason,
     }),
+    sessionPromptFile,
   ].filter(Boolean);
   // Static parts only (no per-message inbound metadata) for CLI session reuse hashing.
   const extraSystemPromptStaticParts = [
@@ -518,6 +524,7 @@ export async function runPreparedReply(
       fullAccessAvailable: fullAccessState.available,
       fullAccessBlockedReason: fullAccessState.blockedReason,
     }),
+    sessionPromptFile,
   ].filter(Boolean);
   const silentReplyPromptMode: SilentReplyPromptMode =
     directChatContext || groupChatContext || opts?.sourceReplyDeliveryMode === "message_tool_only"
