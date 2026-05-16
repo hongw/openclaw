@@ -1232,10 +1232,34 @@ export function resolveGatewaySessionThinkingDefault(params: {
   );
 }
 
+const sessionDefaultsCache = new WeakMap<
+  OpenClawConfig,
+  {
+    noCatalog?: GatewaySessionsDefaults;
+    catalogs: WeakMap<ModelCatalogEntry[], GatewaySessionsDefaults>;
+  }
+>();
+
 export function getSessionDefaults(
   cfg: OpenClawConfig,
   modelCatalog?: ModelCatalogEntry[],
 ): GatewaySessionsDefaults {
+  let cachedForConfig = sessionDefaultsCache.get(cfg);
+  if (!cachedForConfig) {
+    cachedForConfig = { catalogs: new WeakMap() };
+    sessionDefaultsCache.set(cfg, cachedForConfig);
+  }
+  if (!modelCatalog) {
+    if (cachedForConfig.noCatalog) {
+      return cachedForConfig.noCatalog;
+    }
+  } else {
+    const cached = cachedForConfig.catalogs.get(modelCatalog);
+    if (cached) {
+      return cached;
+    }
+  }
+
   const resolved = resolveConfiguredModelRef({
     cfg,
     defaultProvider: DEFAULT_PROVIDER,
@@ -1246,7 +1270,7 @@ export function getSessionDefaults(
     lookupContextTokens(resolved.model, { allowAsyncLoad: false }) ??
     DEFAULT_CONTEXT_TOKENS;
   const thinkingLevels = listThinkingLevelOptions(resolved.provider, resolved.model, modelCatalog);
-  return {
+  const defaults = {
     modelProvider: resolved.provider ?? null,
     model: resolved.model ?? null,
     contextTokens: contextTokens ?? null,
@@ -1259,6 +1283,12 @@ export function getSessionDefaults(
       modelCatalog,
     }),
   };
+  if (!modelCatalog) {
+    cachedForConfig.noCatalog = defaults;
+  } else {
+    cachedForConfig.catalogs.set(modelCatalog, defaults);
+  }
+  return defaults;
 }
 
 export function resolveSessionModelRef(

@@ -114,9 +114,7 @@ import { assertValidParams } from "./validation.js";
 type SessionsRuntimeModule = typeof import("./sessions.runtime.js");
 
 let sessionsRuntimeModulePromise: Promise<SessionsRuntimeModule> | undefined;
-let loggedSlowSessionsListCatalog = false;
 
-const SESSIONS_LIST_MODEL_CATALOG_TIMEOUT_MS = 750;
 const SESSIONS_LIST_DIAGNOSTICS_INFO_THRESHOLD_MS = 250;
 
 type SessionsListHandlerDiagnostics = {
@@ -192,37 +190,6 @@ function logSessionsListDiagnostics(params: {
 function loadSessionsRuntimeModule(): Promise<SessionsRuntimeModule> {
   sessionsRuntimeModulePromise ??= import("./sessions.runtime.js");
   return sessionsRuntimeModulePromise;
-}
-
-async function loadOptionalSessionsListModelCatalog(
-  context: GatewayRequestContext,
-): Promise<Awaited<ReturnType<GatewayRequestContext["loadGatewayModelCatalog"]>> | undefined> {
-  let timeout: NodeJS.Timeout | undefined;
-  const timedOut = Symbol("sessions-list-model-catalog-timeout");
-  const timeoutPromise = new Promise<typeof timedOut>((resolve) => {
-    timeout = setTimeout(() => resolve(timedOut), SESSIONS_LIST_MODEL_CATALOG_TIMEOUT_MS);
-    timeout.unref?.();
-  });
-  try {
-    const result = await Promise.race([
-      context.loadGatewayModelCatalog().catch(() => undefined),
-      timeoutPromise,
-    ]);
-    if (result === timedOut) {
-      if (!loggedSlowSessionsListCatalog) {
-        loggedSlowSessionsListCatalog = true;
-        context.logGateway.debug(
-          `sessions.list continuing without model catalog after ${SESSIONS_LIST_MODEL_CATALOG_TIMEOUT_MS}ms`,
-        );
-      }
-      return undefined;
-    }
-    return Array.isArray(result) ? result : undefined;
-  } finally {
-    if (timeout) {
-      clearTimeout(timeout);
-    }
-  }
 }
 
 function requireSessionKey(key: unknown, respond: RespondFn): string | null {
@@ -744,9 +711,8 @@ export const sessionsHandlers: GatewayRequestHandlers = {
     const storeStart = nowForSessionsListDiagnostics();
     const { storePath, store } = loadCombinedSessionStoreForGateway(cfg, { agentId: p.agentId });
     const storeLoadMs = elapsedSessionsListDiagnosticsMs(storeStart);
-    const catalogStart = nowForSessionsListDiagnostics();
-    const modelCatalog = await loadOptionalSessionsListModelCatalog(context);
-    const modelCatalogMs = elapsedSessionsListDiagnosticsMs(catalogStart);
+    const modelCatalog = undefined;
+    const modelCatalogMs = 0;
     let buildDiagnostics: SessionsListBuildDiagnostics | undefined;
     const result = await listSessionsFromStoreAsync({
       cfg,
