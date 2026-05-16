@@ -503,6 +503,12 @@ function resolveSessionSelectedModelRef(params: {
     providerOverride: params.entry?.providerOverride,
     modelOverride: params.entry?.modelOverride,
   });
+  if (override.providerOverride && override.modelOverride) {
+    return {
+      provider: override.providerOverride,
+      model: override.modelOverride,
+    };
+  }
   if (!override.modelOverride) {
     return null;
   }
