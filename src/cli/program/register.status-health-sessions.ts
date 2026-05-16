@@ -5,6 +5,7 @@ import { flowsCancelCommand, flowsListCommand, flowsShowCommand } from "../../co
 import { healthCommand } from "../../commands/health.js";
 import { sessionsCleanupCommand } from "../../commands/sessions-cleanup.js";
 import { sessionsCommand } from "../../commands/sessions.js";
+import { callGateway } from "../../gateway/call.js";
 import { statusCommand } from "../../commands/status.js";
 import {
   tasksAuditCommand,
@@ -15,9 +16,10 @@ import {
   tasksShowCommand,
 } from "../../commands/tasks.js";
 import { setVerbose } from "../../globals.js";
-import { defaultRuntime } from "../../runtime.js";
+import { defaultRuntime, writeRuntimeJson } from "../../runtime.js";
 import { formatDocsLink } from "../../terminal/links.js";
 import { theme } from "../../terminal/theme.js";
+import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../utils/message-channel.js";
 import { runCommandWithRuntime } from "../cli-utils.js";
 import { formatHelpExamples } from "../help-format.js";
 import { parsePositiveIntOrUndefined } from "./helpers.js";
@@ -165,6 +167,62 @@ export function registerStatusHealthSessionsCommands(program: Command) {
       );
     });
   sessionsCmd.enablePositionalOptions();
+
+  sessionsCmd
+    .command("remove <key>")
+    .aliases(["rm", "delete"])
+    .description("Remove a stored session via the Gateway")
+    .option("--json", "Output JSON", false)
+    .addHelpText(
+      "after",
+      () =>
+        `\n${theme.heading("Examples:")}\n${formatHelpExamples([
+          ["openclaw sessions remove agent:main:webchat:debug", "Remove by session key."],
+          ["openclaw sessions rm agent:main:explicit:abc123", "Short alias."],
+        ])}`,
+    )
+    .action(async (key: string, opts, command) => {
+      const parentOpts = command.parent?.opts() as
+        | {
+            json?: boolean;
+          }
+        | undefined;
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        const trimmedKey = key.trim();
+        if (!trimmedKey) {
+          defaultRuntime.error("Session key is required.");
+          defaultRuntime.exit(1);
+          return;
+        }
+        const result = await callGateway<{
+          ok: boolean;
+          key: string;
+          deleted: boolean;
+          archived?: string[];
+        }>({
+          method: "sessions.delete",
+          params: {
+            key: trimmedKey,
+            deleteTranscript: true,
+          },
+          mode: GATEWAY_CLIENT_MODES.CLI,
+          clientName: GATEWAY_CLIENT_NAMES.CLI,
+          requiredMethods: ["sessions.delete"],
+        });
+        if (opts.json || parentOpts?.json) {
+          writeRuntimeJson(defaultRuntime, result);
+          return;
+        }
+        if (result.deleted) {
+          defaultRuntime.log(theme.success(`✓ Removed session: ${result.key}`));
+          for (const archivedPath of result.archived ?? []) {
+            defaultRuntime.log(theme.muted(`  Archived: ${archivedPath}`));
+          }
+        } else {
+          defaultRuntime.log(theme.warn(`Session not found: ${trimmedKey}`));
+        }
+      });
+    });
 
   sessionsCmd
     .command("cleanup")
