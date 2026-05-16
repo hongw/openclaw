@@ -1417,6 +1417,39 @@ export function resolveSessionDisplayModelIdentityRef(params: {
   };
 }
 
+export type SessionsListRowBuildPhaseDiagnostics = {
+  rows: number;
+  displayMs: number;
+  subagentMs: number;
+  modelMs: number;
+  usageMs: number;
+  childSessionsMs: number;
+  compactionMs: number;
+  modelDisplayMs: number;
+  costContextMs: number;
+  syncTranscriptMs: number;
+  thinkingPluginMs: number;
+  assemblyMs: number;
+};
+
+type SessionsListRowBuildPhaseKey = Exclude<keyof SessionsListRowBuildPhaseDiagnostics, "rows">;
+
+function startSessionsListRowPhase(
+  diagnostics: SessionsListRowBuildPhaseDiagnostics | undefined,
+): bigint | undefined {
+  return diagnostics ? nowForSessionsListDiagnostics() : undefined;
+}
+
+function finishSessionsListRowPhase(
+  diagnostics: SessionsListRowBuildPhaseDiagnostics | undefined,
+  key: SessionsListRowBuildPhaseKey,
+  start: bigint | undefined,
+) {
+  if (diagnostics && start !== undefined) {
+    diagnostics[key] += elapsedSessionsListDiagnosticsMs(start);
+  }
+}
+
 export function buildGatewaySessionRow(params: {
   cfg: OpenClawConfig;
   storePath: string;
@@ -1432,11 +1465,17 @@ export function buildGatewaySessionRow(params: {
   rowContext?: SessionListRowContext;
   skipTranscriptUsageFallback?: boolean;
   lightweightListRow?: boolean;
+  rowDiagnostics?: SessionsListRowBuildPhaseDiagnostics;
 }): GatewaySessionRow {
   const { cfg, storePath, store, key, entry } = params;
+  const rowDiagnostics = params.rowDiagnostics;
+  if (rowDiagnostics) {
+    rowDiagnostics.rows += 1;
+  }
   const lightweight = params.lightweightListRow === true;
   const skipTranscriptUsage = params.skipTranscriptUsageFallback === true;
   const now = params.now ?? Date.now();
+  let phaseStart = startSessionsListRowPhase(rowDiagnostics);
   const updatedAt = entry?.updatedAt ?? null;
   const parsed = parseGroupKey(key);
   const channel = entry?.channel ?? parsed?.channel;
@@ -1461,6 +1500,8 @@ export function buildGatewaySessionRow(params: {
     entry?.label ??
     originLabel;
   const deliveryFields = normalizeSessionDeliveryFields(entry);
+  finishSessionsListRowPhase(rowDiagnostics, "displayMs", phaseStart);
+  phaseStart = startSessionsListRowPhase(rowDiagnostics);
   const parsedAgent = parseAgentSessionKey(key);
   const sessionAgentId = normalizeAgentId(parsedAgent?.agentId ?? resolveDefaultAgentId(cfg));
   const rowContext = params.rowContext;
@@ -1515,6 +1556,8 @@ export function buildGatewaySessionRow(params: {
           ? resolveSessionRuntimeMs(subagentRun, now)
           : undefined))
     : undefined;
+  finishSessionsListRowPhase(rowDiagnostics, "subagentMs", phaseStart);
+  phaseStart = startSessionsListRowPhase(rowDiagnostics);
   const selectedModel = entry?.modelOverride?.trim()
     ? resolveSessionModelRef(cfg, entry, sessionAgentId)
     : null;
@@ -1526,6 +1569,8 @@ export function buildGatewaySessionRow(params: {
   );
   const runtimeModelPresent =
     Boolean(entry?.model?.trim()) || Boolean(entry?.modelProvider?.trim());
+  finishSessionsListRowPhase(rowDiagnostics, "modelMs", phaseStart);
+  phaseStart = startSessionsListRowPhase(rowDiagnostics);
   const needsTranscriptTotalTokens =
     resolvePositiveNumber(resolveFreshSessionTotalTokens(entry)) === undefined;
   const needsTranscriptContextTokens = resolvePositiveNumber(entry?.contextTokens) === undefined;
@@ -1573,15 +1618,21 @@ export function buildGatewaySessionRow(params: {
     typeof totalTokens === "number" && Number.isFinite(totalTokens) && totalTokens > 0
       ? true
       : transcriptUsage?.totalTokensFresh === true;
+  finishSessionsListRowPhase(rowDiagnostics, "usageMs", phaseStart);
+  phaseStart = startSessionsListRowPhase(rowDiagnostics);
   const childSessions = params.storeChildSessionsByKey
     ? mergeChildSessionKeys(
         resolveRuntimeChildSessionKeys(key, now, rowContext?.subagentRuns),
         params.storeChildSessionsByKey.get(key),
       )
     : resolveChildSessionKeys(key, store, now, rowContext?.subagentRuns);
+  finishSessionsListRowPhase(rowDiagnostics, "childSessionsMs", phaseStart);
+  phaseStart = startSessionsListRowPhase(rowDiagnostics);
   const latestCompactionCheckpoint = buildCompactionCheckpointPreview(
     resolveLatestCompactionCheckpoint(entry),
   );
+  finishSessionsListRowPhase(rowDiagnostics, "compactionMs", phaseStart);
+  phaseStart = startSessionsListRowPhase(rowDiagnostics);
   const agentRuntime = lightweight ? undefined : resolveAgentRuntimeMetadata(cfg, sessionAgentId);
   const selectedOrRuntimeModelProvider = selectedModel?.provider ?? modelProvider;
   const selectedOrRuntimeModel = selectedModel?.model ?? model;
@@ -1595,6 +1646,8 @@ export function buildGatewaySessionRow(params: {
       });
   const rowModelProvider = rowModelIdentity.provider;
   const rowModel = rowModelIdentity.model;
+  finishSessionsListRowPhase(rowDiagnostics, "modelDisplayMs", phaseStart);
+  phaseStart = startSessionsListRowPhase(rowDiagnostics);
   const estimatedCostUsd = lightweight
     ? resolveNonNegativeNumber(entry?.estimatedCostUsd)
     : resolveEstimatedSessionCostUsd({
@@ -1615,6 +1668,8 @@ export function buildGatewaySessionRow(params: {
           allowAsyncLoad: false,
         }),
       );
+  finishSessionsListRowPhase(rowDiagnostics, "costContextMs", phaseStart);
+  phaseStart = startSessionsListRowPhase(rowDiagnostics);
 
   let derivedTitle: string | undefined;
   let lastMessagePreview: string | undefined;
@@ -1632,6 +1687,8 @@ export function buildGatewaySessionRow(params: {
       lastMessagePreview = fields.lastMessagePreview;
     }
   }
+  finishSessionsListRowPhase(rowDiagnostics, "syncTranscriptMs", phaseStart);
+  phaseStart = startSessionsListRowPhase(rowDiagnostics);
 
   const thinkingProvider = rowModelProvider ?? DEFAULT_PROVIDER;
   const thinkingModel = rowModel ?? DEFAULT_MODEL;
@@ -1640,8 +1697,10 @@ export function buildGatewaySessionRow(params: {
     : listThinkingLevelOptions(thinkingProvider, thinkingModel, params.modelCatalog);
   const pluginExtensions =
     !lightweight && entry ? projectPluginSessionExtensionsSync({ sessionKey: key, entry }) : [];
+  finishSessionsListRowPhase(rowDiagnostics, "thinkingPluginMs", phaseStart);
+  phaseStart = startSessionsListRowPhase(rowDiagnostics);
 
-  return {
+  const row: GatewaySessionRow = {
     key,
     spawnedBy: subagentOwner || entry?.spawnedBy,
     spawnedWorkspaceDir: entry?.spawnedWorkspaceDir,
@@ -1709,6 +1768,8 @@ export function buildGatewaySessionRow(params: {
     latestCompactionCheckpoint,
     pluginExtensions: pluginExtensions.length > 0 ? pluginExtensions : undefined,
   };
+  finishSessionsListRowPhase(rowDiagnostics, "assemblyMs", phaseStart);
+  return row;
 }
 
 function resolveSessionListSearchDisplayName(
@@ -1776,6 +1837,7 @@ export type SessionsListBuildDiagnostics = {
   filterSortMs: number;
   rowContextMs: number;
   rowBuildMs: number;
+  rowPhases: SessionsListRowBuildPhaseDiagnostics;
   transcriptFieldMs: number;
   transcriptFieldRows: number;
   yieldMs: number;
@@ -2040,6 +2102,20 @@ export async function listSessionsFromStoreAsync(params: {
   const filterSortMs = elapsedSessionsListDiagnosticsMs(filterStart);
 
   let rowBuildMs = 0;
+  const rowPhases: SessionsListRowBuildPhaseDiagnostics = {
+    rows: 0,
+    displayMs: 0,
+    subagentMs: 0,
+    modelMs: 0,
+    usageMs: 0,
+    childSessionsMs: 0,
+    compactionMs: 0,
+    modelDisplayMs: 0,
+    costContextMs: 0,
+    syncTranscriptMs: 0,
+    thinkingPluginMs: 0,
+    assemblyMs: 0,
+  };
   let transcriptFieldMs = 0;
   let transcriptFieldRows = 0;
   let yieldMs = 0;
@@ -2065,6 +2141,7 @@ export async function listSessionsFromStoreAsync(params: {
       rowContext: rowContextForRow,
       skipTranscriptUsageFallback: true,
       lightweightListRow: true,
+      rowDiagnostics: rowPhases,
     });
     rowBuildMs += elapsedSessionsListDiagnosticsMs(rowStart);
     if (
@@ -2115,6 +2192,7 @@ export async function listSessionsFromStoreAsync(params: {
     filterSortMs,
     rowContextMs,
     rowBuildMs,
+    rowPhases,
     transcriptFieldMs,
     transcriptFieldRows,
     yieldMs,

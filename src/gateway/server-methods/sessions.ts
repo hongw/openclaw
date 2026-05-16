@@ -146,6 +146,7 @@ function logSessionsListDiagnostics(params: {
 }) {
   const { context, opts, diagnostics } = params;
   const build = diagnostics.build;
+  const rowPhases = build?.rowPhases;
   const parts = [
     `sessions.list perf total=${formatSessionsListMs(diagnostics.totalMs)}ms`,
     `storeLoad=${formatSessionsListMs(diagnostics.storeLoadMs)}ms`,
@@ -154,6 +155,17 @@ function logSessionsListDiagnostics(params: {
     `filterSort=${formatSessionsListMs(build?.filterSortMs)}ms`,
     `rowContext=${formatSessionsListMs(build?.rowContextMs)}ms`,
     `rowBuild=${formatSessionsListMs(build?.rowBuildMs)}ms`,
+    `rowDisplay=${formatSessionsListMs(rowPhases?.displayMs)}ms`,
+    `rowSubagent=${formatSessionsListMs(rowPhases?.subagentMs)}ms`,
+    `rowModel=${formatSessionsListMs(rowPhases?.modelMs)}ms`,
+    `rowUsage=${formatSessionsListMs(rowPhases?.usageMs)}ms`,
+    `rowChild=${formatSessionsListMs(rowPhases?.childSessionsMs)}ms`,
+    `rowCompaction=${formatSessionsListMs(rowPhases?.compactionMs)}ms`,
+    `rowModelDisplay=${formatSessionsListMs(rowPhases?.modelDisplayMs)}ms`,
+    `rowCostContext=${formatSessionsListMs(rowPhases?.costContextMs)}ms`,
+    `rowSyncTranscript=${formatSessionsListMs(rowPhases?.syncTranscriptMs)}ms`,
+    `rowThinkingPlugin=${formatSessionsListMs(rowPhases?.thinkingPluginMs)}ms`,
+    `rowAssembly=${formatSessionsListMs(rowPhases?.assemblyMs)}ms`,
     `transcriptFields=${formatSessionsListMs(build?.transcriptFieldMs)}ms/${build?.transcriptFieldRows ?? 0}`,
     `yield=${formatSessionsListMs(build?.yieldMs)}ms/${build?.yieldCount ?? 0}`,
     `defaults=${formatSessionsListMs(build?.defaultsMs)}ms`,
