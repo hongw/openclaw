@@ -1767,6 +1767,22 @@ export function loadGatewaySessionRow(
 const SESSIONS_LIST_YIELD_BATCH_SIZE = 10;
 const SESSIONS_LIST_TOP_N_LIMIT = 200;
 
+export type SessionsListBuildDiagnostics = {
+  totalMs: number;
+  storeEntryCount: number;
+  selectedEntryCount: number;
+  includeDerivedTitles: boolean;
+  includeLastMessage: boolean;
+  filterSortMs: number;
+  rowContextMs: number;
+  rowBuildMs: number;
+  transcriptFieldMs: number;
+  transcriptFieldRows: number;
+  yieldMs: number;
+  yieldCount: number;
+  defaultsMs: number;
+};
+
 type SessionEntryPair = [string, SessionEntry];
 
 function compareSessionEntryPairsByUpdatedAt(a: SessionEntryPair, b: SessionEntryPair): number {
@@ -1812,6 +1828,14 @@ function sortAndLimitSessionEntries(
   }
   const sorted = entries.toSorted(compareSessionEntryPairsByUpdatedAt);
   return limit === undefined ? sorted : sorted.slice(0, limit);
+}
+
+function nowForSessionsListDiagnostics(): bigint {
+  return process.hrtime.bigint();
+}
+
+function elapsedSessionsListDiagnosticsMs(start: bigint): number {
+  return Number(process.hrtime.bigint() - start) / 1_000_000;
 }
 
 export function filterAndSortSessionEntries(params: {
@@ -1985,31 +2009,47 @@ export async function listSessionsFromStoreAsync(params: {
   store: Record<string, SessionEntry>;
   modelCatalog?: ModelCatalogEntry[];
   opts: import("./protocol/index.js").SessionsListParams;
+  onDiagnostics?: (diagnostics: SessionsListBuildDiagnostics) => void;
 }): Promise<SessionsListResult> {
+  const totalStart = nowForSessionsListDiagnostics();
   const { cfg, storePath, store, opts } = params;
   const now = Date.now();
   const sessionListTranscriptUsageMaxBytes = 64 * 1024;
   const sessionListTranscriptFieldRows = 100;
   let rowContext: SessionListRowContext | undefined;
+  let rowContextMs = 0;
   const getRowContext = () => {
-    rowContext ??= buildSessionListRowContext({ store, now });
+    if (!rowContext) {
+      const start = nowForSessionsListDiagnostics();
+      rowContext = buildSessionListRowContext({ store, now });
+      rowContextMs += elapsedSessionsListDiagnosticsMs(start);
+    }
     return rowContext;
   };
   const includeDerivedTitles = opts.includeDerivedTitles === true;
   const includeLastMessage = opts.includeLastMessage === true;
   const hasSpawnedByFilter = typeof opts.spawnedBy === "string" && opts.spawnedBy.length > 0;
 
+  const filterStart = nowForSessionsListDiagnostics();
   const entries = filterAndSortSessionEntries({
     store,
     opts,
     now,
     rowContext: hasSpawnedByFilter ? getRowContext() : undefined,
   });
+  const filterSortMs = elapsedSessionsListDiagnosticsMs(filterStart);
 
+  let rowBuildMs = 0;
+  let transcriptFieldMs = 0;
+  let transcriptFieldRows = 0;
+  let yieldMs = 0;
+  let yieldCount = 0;
   const sessions: GatewaySessionRow[] = [];
   for (let i = 0; i < entries.length; i++) {
     const [key, entry] = entries[i];
     const includeTranscriptFields = i < sessionListTranscriptFieldRows;
+    const rowContextForRow = getRowContext();
+    const rowStart = nowForSessionsListDiagnostics();
     const row = buildGatewaySessionRow({
       cfg,
       storePath,
@@ -2021,16 +2061,18 @@ export async function listSessionsFromStoreAsync(params: {
       includeDerivedTitles: false,
       includeLastMessage: false,
       transcriptUsageMaxBytes: sessionListTranscriptUsageMaxBytes,
-      storeChildSessionsByKey: getRowContext().storeChildSessionsByKey,
-      rowContext: getRowContext(),
+      storeChildSessionsByKey: rowContextForRow.storeChildSessionsByKey,
+      rowContext: rowContextForRow,
       skipTranscriptUsageFallback: true,
       lightweightListRow: true,
     });
+    rowBuildMs += elapsedSessionsListDiagnosticsMs(rowStart);
     if (
       entry?.sessionId &&
       includeTranscriptFields &&
       (includeDerivedTitles || includeLastMessage)
     ) {
+      const transcriptStart = nowForSessionsListDiagnostics();
       const parsed = parseAgentSessionKey(key);
       const sessionAgentId = parsed?.agentId
         ? normalizeAgentId(parsed.agentId)
@@ -2041,6 +2083,8 @@ export async function listSessionsFromStoreAsync(params: {
         entry.sessionFile,
         sessionAgentId,
       );
+      transcriptFieldMs += elapsedSessionsListDiagnosticsMs(transcriptStart);
+      transcriptFieldRows += 1;
       if (includeDerivedTitles) {
         row.derivedTitle = deriveSessionTitle(entry, fields.firstUserMessage);
       }
@@ -2052,15 +2096,37 @@ export async function listSessionsFromStoreAsync(params: {
     // Yield to the event loop between batches so WebSocket heartbeats,
     // channel I/O, and concurrent RPC calls are not starved.
     if ((i + 1) % SESSIONS_LIST_YIELD_BATCH_SIZE === 0 && i + 1 < entries.length) {
+      const yieldStart = nowForSessionsListDiagnostics();
       await new Promise<void>((resolve) => setImmediate(resolve));
+      yieldMs += elapsedSessionsListDiagnosticsMs(yieldStart);
+      yieldCount += 1;
     }
   }
+
+  const defaultsStart = nowForSessionsListDiagnostics();
+  const defaults = getSessionDefaults(cfg, params.modelCatalog);
+  const defaultsMs = elapsedSessionsListDiagnosticsMs(defaultsStart);
+  params.onDiagnostics?.({
+    totalMs: elapsedSessionsListDiagnosticsMs(totalStart),
+    storeEntryCount: Object.keys(store).length,
+    selectedEntryCount: sessions.length,
+    includeDerivedTitles,
+    includeLastMessage,
+    filterSortMs,
+    rowContextMs,
+    rowBuildMs,
+    transcriptFieldMs,
+    transcriptFieldRows,
+    yieldMs,
+    yieldCount,
+    defaultsMs,
+  });
 
   return {
     ts: now,
     path: storePath,
     count: sessions.length,
-    defaults: getSessionDefaults(cfg, params.modelCatalog),
+    defaults,
     sessions,
   };
 }

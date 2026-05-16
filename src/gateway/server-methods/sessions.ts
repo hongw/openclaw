@@ -93,6 +93,7 @@ import {
   resolveSessionDisplayModelIdentityRef,
   resolveSessionModelRef,
   resolveSessionTranscriptCandidates,
+  type SessionsListBuildDiagnostics,
   type SessionsPatchResult,
   type SessionsPreviewEntry,
   type SessionsPreviewResult,
@@ -116,6 +117,65 @@ let sessionsRuntimeModulePromise: Promise<SessionsRuntimeModule> | undefined;
 let loggedSlowSessionsListCatalog = false;
 
 const SESSIONS_LIST_MODEL_CATALOG_TIMEOUT_MS = 750;
+const SESSIONS_LIST_DIAGNOSTICS_INFO_THRESHOLD_MS = 250;
+
+type SessionsListHandlerDiagnostics = {
+  totalMs: number;
+  storeLoadMs: number;
+  modelCatalogMs: number;
+  activeRunMs: number;
+  build?: SessionsListBuildDiagnostics;
+};
+
+function nowForSessionsListDiagnostics(): bigint {
+  return process.hrtime.bigint();
+}
+
+function elapsedSessionsListDiagnosticsMs(start: bigint): number {
+  return Number(process.hrtime.bigint() - start) / 1_000_000;
+}
+
+function formatSessionsListMs(value: number | undefined): string {
+  return typeof value === "number" && Number.isFinite(value) ? value.toFixed(1) : "n/a";
+}
+
+function logSessionsListDiagnostics(params: {
+  context: GatewayRequestContext;
+  opts: import("../protocol/index.js").SessionsListParams;
+  diagnostics: SessionsListHandlerDiagnostics;
+}) {
+  const { context, opts, diagnostics } = params;
+  const build = diagnostics.build;
+  const parts = [
+    `sessions.list perf total=${formatSessionsListMs(diagnostics.totalMs)}ms`,
+    `storeLoad=${formatSessionsListMs(diagnostics.storeLoadMs)}ms`,
+    `modelCatalog=${formatSessionsListMs(diagnostics.modelCatalogMs)}ms`,
+    `build=${formatSessionsListMs(build?.totalMs)}ms`,
+    `filterSort=${formatSessionsListMs(build?.filterSortMs)}ms`,
+    `rowContext=${formatSessionsListMs(build?.rowContextMs)}ms`,
+    `rowBuild=${formatSessionsListMs(build?.rowBuildMs)}ms`,
+    `transcriptFields=${formatSessionsListMs(build?.transcriptFieldMs)}ms/${build?.transcriptFieldRows ?? 0}`,
+    `yield=${formatSessionsListMs(build?.yieldMs)}ms/${build?.yieldCount ?? 0}`,
+    `defaults=${formatSessionsListMs(build?.defaultsMs)}ms`,
+    `activeRun=${formatSessionsListMs(diagnostics.activeRunMs)}ms`,
+    `storeEntries=${build?.storeEntryCount ?? "n/a"}`,
+    `rows=${build?.selectedEntryCount ?? "n/a"}`,
+    `limit=${typeof opts.limit === "number" ? opts.limit : "none"}`,
+    `titles=${opts.includeDerivedTitles === true}`,
+    `last=${opts.includeLastMessage === true}`,
+    opts.activeMinutes ? `activeMinutes=${opts.activeMinutes}` : undefined,
+    opts.agentId ? `agentId=${opts.agentId}` : undefined,
+    opts.label ? `label=${opts.label}` : undefined,
+    opts.spawnedBy ? `spawnedBy=${opts.spawnedBy}` : undefined,
+    opts.search ? `search=1` : undefined,
+  ].filter((part): part is string => Boolean(part));
+  const line = parts.join(" ");
+  if (diagnostics.totalMs >= SESSIONS_LIST_DIAGNOSTICS_INFO_THRESHOLD_MS) {
+    context.logGateway.info(line);
+  } else {
+    context.logGateway.debug(line);
+  }
+}
 
 function loadSessionsRuntimeModule(): Promise<SessionsRuntimeModule> {
   sessionsRuntimeModulePromise ??= import("./sessions.runtime.js");
@@ -667,29 +727,52 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       return;
     }
     const p = params;
+    const totalStart = nowForSessionsListDiagnostics();
     const cfg = context.getRuntimeConfig();
+    const storeStart = nowForSessionsListDiagnostics();
     const { storePath, store } = loadCombinedSessionStoreForGateway(cfg, { agentId: p.agentId });
+    const storeLoadMs = elapsedSessionsListDiagnosticsMs(storeStart);
+    const catalogStart = nowForSessionsListDiagnostics();
     const modelCatalog = await loadOptionalSessionsListModelCatalog(context);
+    const modelCatalogMs = elapsedSessionsListDiagnosticsMs(catalogStart);
+    let buildDiagnostics: SessionsListBuildDiagnostics | undefined;
     const result = await listSessionsFromStoreAsync({
       cfg,
       storePath,
       store,
       modelCatalog,
       opts: p,
+      onDiagnostics: (diagnostics) => {
+        buildDiagnostics = diagnostics;
+      },
+    });
+    const activeRunStart = nowForSessionsListDiagnostics();
+    const sessions = result.sessions.map((session) =>
+      Object.assign({}, session, {
+        hasActiveRun: hasTrackedActiveSessionRun({
+          context,
+          requestedKey: session.key,
+          canonicalKey: session.key,
+        }),
+      }),
+    );
+    const activeRunMs = elapsedSessionsListDiagnosticsMs(activeRunStart);
+    logSessionsListDiagnostics({
+      context,
+      opts: p,
+      diagnostics: {
+        totalMs: elapsedSessionsListDiagnosticsMs(totalStart),
+        storeLoadMs,
+        modelCatalogMs,
+        activeRunMs,
+        build: buildDiagnostics,
+      },
     });
     respond(
       true,
       {
         ...result,
-        sessions: result.sessions.map((session) =>
-          Object.assign({}, session, {
-            hasActiveRun: hasTrackedActiveSessionRun({
-              context,
-              requestedKey: session.key,
-              canonicalKey: session.key,
-            }),
-          }),
-        ),
+        sessions,
       },
       undefined,
     );
