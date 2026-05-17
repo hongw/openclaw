@@ -30,6 +30,16 @@ async function createTempSessionPath() {
   return { dir, file: path.join(dir, "session.jsonl") };
 }
 
+async function expectNoRetainedBackup(
+  file: string,
+  result: { backupPath?: string },
+): Promise<void> {
+  expect(result.backupPath).toBeUndefined();
+  const siblings = await fs.readdir(path.dirname(file));
+  const leftover = siblings.filter((name) => name.includes(".bak-"));
+  expect(leftover).toEqual([]);
+}
+
 afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
@@ -45,14 +55,24 @@ describe("repairSessionFileIfNeeded", () => {
     const result = await repairSessionFileIfNeeded({ sessionFile: file });
     expect(result.repaired).toBe(true);
     expect(result.droppedLines).toBe(1);
-    expect(result.backupPath).toBeTruthy();
 
     const repaired = await fs.readFile(file, "utf-8");
     expect(repaired.trim().split("\n")).toHaveLength(2);
+    await expectNoRetainedBackup(file, result);
+  });
 
-    if (result.backupPath) {
-      const backup = await fs.readFile(result.backupPath, "utf-8");
-      expect(backup).toBe(content);
+  it("does not accumulate backups across repeated repairs of a persistently corrupted file", async () => {
+    const { file } = await createTempSessionPath();
+    const { header, message } = buildSessionHeaderAndMessage();
+    const malformedTail = '{"type":"message"';
+
+    for (let i = 0; i < 5; i++) {
+      const content = `${JSON.stringify(header)}\n${JSON.stringify(message)}\n${malformedTail}`;
+      await fs.writeFile(file, content, "utf-8");
+      const result = await repairSessionFileIfNeeded({ sessionFile: file });
+      expect(result.repaired).toBe(true);
+      expect(result.droppedLines).toBe(1);
+      await expectNoRetainedBackup(file, result);
     }
   });
 
@@ -134,7 +154,7 @@ describe("repairSessionFileIfNeeded", () => {
     expect(result.repaired).toBe(true);
     expect(result.droppedLines).toBe(0);
     expect(result.rewrittenAssistantMessages).toBe(1);
-    expect(result.backupPath).toBeTruthy();
+    await expectNoRetainedBackup(file, result);
     expect(debug).toHaveBeenCalledTimes(1);
     const debugMessage = debug.mock.calls[0]?.[0] as string;
     expect(debugMessage).toContain("rewrote 1 assistant message(s)");
