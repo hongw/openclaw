@@ -177,6 +177,18 @@ export function createAgentEventHandler({
     chatRunState.deltaLastBroadcastLen.delete(clientRunId);
   };
 
+  const insertToolBoundaryChatSeparator = (clientRunId: string) => {
+    const rawText = chatRunState.rawBuffers.get(clientRunId) ?? "";
+    const currentProjection = projectLiveAssistantBufferedText(rawText);
+    if (!rawText.trim() || currentProjection.suppress || /\n\n\s*$/.test(rawText)) {
+      return;
+    }
+    const separatedRawText = rawText.endsWith("\n") ? `${rawText}\n` : `${rawText}\n\n`;
+    chatRunState.rawBuffers.set(clientRunId, separatedRawText);
+    const projected = projectLiveAssistantBufferedText(separatedRawText);
+    chatRunState.buffers.set(clientRunId, projected.text);
+  };
+
   const clearPendingTerminalLifecycleError = (runId: string) => {
     const pending = pendingTerminalLifecycleErrors.get(runId);
     if (!pending) {
@@ -641,6 +653,7 @@ export function createAgentEventHandler({
       // render complete pre-tool text above tool cards (not truncated by delta throttle).
       if (toolPhase === "start" && sessionKey && !isAborted) {
         flushBufferedChatDeltaIfNeeded(sessionKey, clientRunId, evt.runId, evt.seq);
+        insertToolBoundaryChatSeparator(clientRunId);
       }
       // Always broadcast tool events to registered WS recipients with
       // tool-events capability, regardless of verboseLevel. The verbose

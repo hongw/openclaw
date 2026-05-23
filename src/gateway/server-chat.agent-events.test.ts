@@ -493,6 +493,111 @@ describe("agent event handler", () => {
     nowSpy.mockRestore();
   });
 
+  it("separates post-tool live chat text with a paragraph break", () => {
+    let now = 10_800;
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const { broadcast, nodeSendToSession, chatRunState, handler } = createHarness();
+    chatRunState.registry.add("run-tool-boundary", {
+      sessionKey: "session-tool-boundary",
+      clientRunId: "client-tool-boundary",
+    });
+
+    handler({
+      runId: "run-tool-boundary",
+      seq: 1,
+      stream: "assistant",
+      ts: Date.now(),
+      data: { text: "hello", delta: "hello" },
+    });
+
+    now = 10_950;
+    handler({
+      runId: "run-tool-boundary",
+      seq: 2,
+      stream: "tool",
+      ts: Date.now(),
+      data: { phase: "start", name: "lookup", toolCallId: "call-1", args: {} },
+    });
+
+    now = 11_150;
+    handler({
+      runId: "run-tool-boundary",
+      seq: 3,
+      stream: "assistant",
+      ts: Date.now(),
+      data: { text: "world", delta: "world" },
+    });
+
+    emitLifecycleEnd(handler, "run-tool-boundary", 4);
+
+    const chatCalls = chatBroadcastCalls(broadcast);
+    expect(chatCalls).toHaveLength(3);
+    expect(chatCalls.map(([, payload]) => (payload as { state?: string }).state)).toEqual([
+      "delta",
+      "delta",
+      "final",
+    ]);
+    expect(
+      chatCalls.map(
+        ([, payload]) =>
+          (payload as { message?: { content?: Array<{ text?: string }> } }).message?.content?.[0]
+            ?.text,
+      ),
+    ).toEqual(["hello", "hello\n\nworld", "hello\n\nworld"]);
+    expect(sessionChatCalls(nodeSendToSession)).toHaveLength(3);
+    nowSpy.mockRestore();
+  });
+
+  it("preserves pre-tool trailing whitespace when inserting paragraph break", () => {
+    let now = 10_800;
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const { broadcast, nodeSendToSession, chatRunState, handler } = createHarness();
+    chatRunState.registry.add("run-tool-boundary-whitespace", {
+      sessionKey: "session-tool-boundary-whitespace",
+      clientRunId: "client-tool-boundary-whitespace",
+    });
+
+    handler({
+      runId: "run-tool-boundary-whitespace",
+      seq: 1,
+      stream: "assistant",
+      ts: Date.now(),
+      data: { text: "hello ", delta: "hello " },
+    });
+
+    now = 10_950;
+    handler({
+      runId: "run-tool-boundary-whitespace",
+      seq: 2,
+      stream: "tool",
+      ts: Date.now(),
+      data: { phase: "start", name: "lookup", toolCallId: "call-1", args: {} },
+    });
+
+    now = 11_150;
+    handler({
+      runId: "run-tool-boundary-whitespace",
+      seq: 3,
+      stream: "assistant",
+      ts: Date.now(),
+      data: { text: "world", delta: "world" },
+    });
+
+    emitLifecycleEnd(handler, "run-tool-boundary-whitespace", 4);
+
+    const chatCalls = chatBroadcastCalls(broadcast);
+    expect(chatCalls).toHaveLength(3);
+    expect(
+      chatCalls.map(
+        ([, payload]) =>
+          (payload as { message?: { content?: Array<{ text?: string }> } }).message?.content?.[0]
+            ?.text,
+      ),
+    ).toEqual(["hello ", "hello \n\nworld", "hello \n\nworld"]);
+    expect(sessionChatCalls(nodeSendToSession)).toHaveLength(3);
+    nowSpy.mockRestore();
+  });
+
   it("flushes merged segmented text before final when latest segment is throttled", () => {
     let now = 10_800;
     const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => now);
